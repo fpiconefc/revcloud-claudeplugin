@@ -125,6 +125,33 @@ def picklists(desc: dict, names: list[str]) -> dict[str, list[str]]:
     return out
 
 
+# Companion and platform objects that every describe drags in. They are never a finding
+# about Revenue Cloud provisioning, so they are counted but kept out of the human report.
+NOISE_SUFFIXES = (
+    "ChangeEvent", "Feed", "History", "Share", "OwnerSharingRule", "Tag",
+)
+
+NOISE_EXACT = {
+    "ActivityHistory", "AttachedContentDocument", "Attachment", "CombinedAttachment",
+    "ContentDocumentLink", "ContentVersion", "EmailMessage", "EntitySubscription",
+    "Event", "EventRelation", "FeedComment", "FeedItem", "ListEmail", "Note",
+    "NoteAndAttachment", "OpenActivity", "OutgoingEmail", "Task", "TopicAssignment",
+    "CollaborationGroupRecord", "RecordAction", "RecordActionHistory",
+    "ProcessException", "ProcessExceptionEvent", "ProcessInstance",
+    "FlowExecutionErrorEvent", "FlowOrchestrationWorkItem", "FlowRecordRelation",
+    "AIInsightValue", "AIRecordInsight", "AgentWork", "AppUsageAssignment",
+    "AsyncOperationLog", "DuplicateRecordItem", "NetworkActivityAudit",
+    "NetworkFeedResponseMetric", "NetworkUserHistoryRecent", "ObjectMetadataTag",
+    "PendingServiceRouting", "PendingServiceRoutingInteractionInfo",
+    "ResourcePreference", "SurveySubject", "ExtlRecShrStagedRecord",
+}
+
+
+def is_noise(name: str) -> bool:
+    """True for platform companion objects that say nothing about provisioning."""
+    return name in NOISE_EXACT or name.endswith(NOISE_SUFFIXES)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fingerprint an org's Revenue Cloud config.")
     ap.add_argument("--org", required=True, help="sf CLI target-org alias or username")
@@ -141,6 +168,7 @@ def main() -> int:
     absent: dict[str, list[str]] = {}
     behaviour: dict[str, dict[str, list[str]]] = {}
     discovered: set[str] = set()
+    noise: set[str] = set()
     seeded = {o for objs in SEED.values() for o in objs}
 
     total = sum(len(v) for v in SEED.values())
@@ -167,7 +195,7 @@ def main() -> int:
             for child in desc.get("childRelationships", []):
                 name = child.get("childSObject") or child.get("childObject")
                 if name and name not in seeded:
-                    discovered.add(name)
+                    (noise if is_noise(name) else discovered).add(name)
 
     fingerprint = {
         "org": args.org,
@@ -182,6 +210,7 @@ def main() -> int:
         },
         "behaviour_picklists": behaviour,
         "discovered_not_in_seed": sorted(discovered),
+        "discovered_noise_filtered": sorted(noise),
     }
     (root / "fingerprint.json").write_text(json.dumps(fingerprint, indent=2), encoding="utf-8")
 
@@ -212,6 +241,10 @@ def main() -> int:
             "",
             "Discovered via child relationships. Review and promote the relevant ones.",
             "",
+            (f"{len(noise)} companion objects (ChangeEvent, Feed, History, Share and the "
+             "like) were filtered out; see discovered_noise_filtered in fingerprint.json."
+             if noise else ""),
+            "",
             ", ".join(f"`{d}`" for d in sorted(discovered)),
             "",
         ]
@@ -226,7 +259,8 @@ def main() -> int:
     print(f"\nWrote {root}/fingerprint.json and FINGERPRINT.md", file=sys.stderr)
     print(f"Modules enabled: {', '.join(enabled) if enabled else 'none detected'}", file=sys.stderr)
     if discovered:
-        print(f"{len(discovered)} related objects found outside the seed list.", file=sys.stderr)
+        print(f"{len(discovered)} related objects found outside the seed list "
+              f"({len(noise)} companion objects filtered out).", file=sys.stderr)
     return 0
 
 

@@ -16,6 +16,7 @@ import argparse
 import hashlib
 import json
 import os
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -47,13 +48,34 @@ SOURCES: list[dict[str, str]] = [
     },
 ]
 
-UA = "rc-context-pack/0.1 (+knowledge pack sweep)"
+UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/125.0 Safari/537.36")
 
 
-def fetch(url: str, timeout: int = 60) -> bytes:
+def _fetch_urllib(url: str, timeout: int) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return resp.read()
+
+
+def _fetch_curl(url: str, timeout: int) -> bytes:
+    """Fallback for hosts Python cannot verify (no certifi) or that reject urllib."""
+    proc = subprocess.run(
+        ["curl", "-sSL", "--fail", "--max-time", str(timeout), "-A", UA, url],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        raise urllib.error.URLError(
+            f"curl exit {proc.returncode}: {proc.stderr.decode('utf-8', 'replace').strip()}"
+        )
+    return proc.stdout
+
+
+def fetch(url: str, timeout: int = 120) -> bytes:
+    try:
+        return _fetch_urllib(url, timeout)
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError):
+        return _fetch_curl(url, timeout)
 
 
 def main() -> int:
