@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# The knowledge pack lives in ~/.claude/knowledge/revenue-cloud/, never in the repo.
+# It is machine-generated, org-specific, and can contain customer configuration.
+knowledge/
+*.describe.json

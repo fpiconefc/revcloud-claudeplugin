@@ -1,0 +1,62 @@
+name: validate
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Marketplace manifest is well-formed
+        run: python3 -c "import json;json.load(open('.claude-plugin/marketplace.json'))"
+
+      - name: Every plugin manifest is well-formed
+        run: |
+          for f in plugins/*/.claude-plugin/plugin.json; do
+            python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$f"
+            echo "ok $f"
+          done
+
+      - name: Every marketplace entry points at a real plugin
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, sys
+          mp = json.load(open('.claude-plugin/marketplace.json'))
+          bad = []
+          for entry in mp['plugins']:
+              src = pathlib.Path(entry['source'])
+              if not (src / '.claude-plugin' / 'plugin.json').exists():
+                  bad.append(entry['name'])
+          if bad:
+              sys.exit('missing plugin.json for: ' + ', '.join(bad))
+          print(f"{len(mp['plugins'])} entries resolve")
+          PY
+
+      - name: Every skill has usable frontmatter
+        run: |
+          python3 - <<'PY'
+          import pathlib, re, sys
+          bad = []
+          found = 0
+          for p in pathlib.Path('plugins').glob('*/skills/*/SKILL.md'):
+              found += 1
+              text = p.read_text(encoding='utf-8')
+              m = re.match(r'^---\n(.*?)\n---', text, re.S)
+              if not m or 'name:' not in m.group(1) or 'description:' not in m.group(1):
+                  bad.append(str(p))
+          if bad:
+              sys.exit('bad frontmatter: ' + ', '.join(bad))
+          print(f'{found} skills validated')
+          PY
+
+      - name: Scripts compile
+        run: |
+          for f in plugins/*/skills/*/scripts/*.py; do
+            python3 -m py_compile "$f" && echo "ok $f"
+          done

@@ -1,0 +1,7 @@
+{
+  "name": "rc-accelerate",
+  "version": "0.0.1",
+  "description": "Delivery management for a Revenue Cloud engagement: tracker, test plan and quote-to-cash test harness.",
+  "author": { "name": "First Chair Services" },
+  "keywords": ["salesforce", "revenue-cloud", "rca", "quote-to-cash"]
+}

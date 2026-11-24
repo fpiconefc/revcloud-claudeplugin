@@ -1,0 +1,7 @@
+{
+  "name": "rc-core",
+  "version": "0.1.0",
+  "description": "Grounding layer for Salesforce Revenue Cloud Advanced: builds and refreshes a verified knowledge pack from the official developer guide and a live org fingerprint.",
+  "author": { "name": "First Chair Services" },
+  "keywords": ["salesforce", "revenue-cloud", "rca", "quote-to-cash"]
+}

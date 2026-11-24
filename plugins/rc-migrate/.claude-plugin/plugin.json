@@ -1,0 +1,7 @@
+{
+  "name": "rc-migrate",
+  "version": "0.0.1",
+  "description": "Salesforce CPQ to Revenue Cloud Advanced migration: extraction, discovery, requirements, solution design and migration plan.",
+  "author": { "name": "First Chair Services" },
+  "keywords": ["salesforce", "revenue-cloud", "rca", "quote-to-cash"]
+}

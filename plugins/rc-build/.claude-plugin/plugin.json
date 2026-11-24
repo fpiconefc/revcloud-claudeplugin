@@ -1,0 +1,7 @@
+{
+  "name": "rc-build",
+  "version": "0.0.1",
+  "description": "Build on Revenue Cloud Advanced: catalog, selling models, pricing, bundles, billing and invoicing.",
+  "author": { "name": "First Chair Services" },
+  "keywords": ["salesforce", "revenue-cloud", "rca", "quote-to-cash"]
+}

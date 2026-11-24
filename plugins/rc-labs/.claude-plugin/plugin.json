@@ -1,0 +1,7 @@
+{
+  "name": "rc-labs",
+  "version": "0.0.1",
+  "description": "Tactical Revenue Cloud skills and troubleshooting.",
+  "author": { "name": "First Chair Services" },
+  "keywords": ["salesforce", "revenue-cloud", "rca", "quote-to-cash"]
+}

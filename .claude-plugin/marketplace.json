@@ -1,0 +1,46 @@
+{
+  "name": "revenue-cloud-skills",
+  "owner": {
+    "name": "First Chair Services"
+  },
+  "metadata": {
+    "description": "Skills for building on Salesforce Revenue Cloud Advanced and migrating from Salesforce CPQ."
+  },
+  "plugins": [
+    {
+      "name": "rc-core",
+      "source": "./plugins/rc-core",
+      "description": "Grounding layer. Builds and refreshes the verified Revenue Cloud knowledge pack from the official developer guide plus a live org fingerprint. Every other rc-* plugin reads it.",
+      "version": "0.1.0",
+      "category": "revenue-cloud"
+    },
+    {
+      "name": "rc-migrate",
+      "source": "./plugins/rc-migrate",
+      "description": "Salesforce CPQ to Revenue Cloud Advanced: extraction, discovery, requirements, solution design and migration plan.",
+      "version": "0.0.1",
+      "category": "revenue-cloud"
+    },
+    {
+      "name": "rc-build",
+      "source": "./plugins/rc-build",
+      "description": "Build on Revenue Cloud Advanced: catalog, selling models, pricing, bundles, billing and invoicing.",
+      "version": "0.0.1",
+      "category": "revenue-cloud"
+    },
+    {
+      "name": "rc-labs",
+      "source": "./plugins/rc-labs",
+      "description": "Tactical Revenue Cloud skills and troubleshooting for one problem at a time.",
+      "version": "0.0.1",
+      "category": "revenue-cloud"
+    },
+    {
+      "name": "rc-accelerate",
+      "source": "./plugins/rc-accelerate",
+      "description": "Delivery management for a Revenue Cloud engagement: tracker, test plan and quote-to-cash test harness.",
+      "version": "0.0.1",
+      "category": "revenue-cloud"
+    }
+  ]
+}
