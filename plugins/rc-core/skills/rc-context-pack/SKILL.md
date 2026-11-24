@@ -1,7 +1,7 @@
 ---
 name: rc-context-pack
 version: '0.1.0'
-description: "Ground any session in verified facts about Salesforce Revenue Cloud Advanced (RCA, formerly Revenue Lifecycle Management) before making any claim about it. Read this BEFORE asserting how RCA works — which object holds what, which fields and picklist values exist, how selling models, price adjustment schedules, bundles, billing schedules, invoicing or amendments behave, what the Place Sales Transaction API accepts, or which API version introduced a feature. Also installs the knowledge pack to ~/.claude/knowledge/revenue-cloud/, fingerprints a live org to record what is actually enabled there, checks cheaply whether the pack has gone stale, and regenerates it. Use for \"ground me in Revenue Cloud\", \"how does RCA handle X\", \"is this RCA claim right\", \"fingerprint the org\", \"what's enabled in this org\", \"install/refresh the Revenue Cloud context pack\", \"which objects do I need for pricing\", and before any rc-migrate, rc-build, rc-labs or rc-accelerate skill runs."
+description: "Ground any session in verified facts about Salesforce Revenue Cloud Advanced (RCA, formerly Revenue Lifecycle Management) before making any claim about it. Read this BEFORE asserting how RCA works — which object holds what, which fields and picklist values exist, how selling models, price adjustment schedules, bundles, billing schedules, invoicing or amendments behave, what the Place Sales Transaction API accepts, or which API version introduced a feature. Also installs the knowledge pack to ~/.claude/knowledge/revenue-cloud/, fingerprints a live org to record what is actually enabled there, checks cheaply whether the pack has gone stale, and regenerates it. Use for \"ground me in Revenue Cloud\", \"how does RCA handle X\", \"is this RCA claim right\", \"fingerprint the org\", \"what's enabled in this org\", \"install/refresh the Revenue Cloud context pack\", \"which objects do I need for pricing\", and before any rc-migrate, rc-build, rc-labs or rc-accelerate skill runs. Not for building on Revenue Cloud or migrating from CPQ (those are rc-build and rc-migrate), and not for writing skills (that is rc-authoring-loop)."
 ---
 
 # Revenue Cloud context pack — ground before you claim
@@ -90,6 +90,8 @@ records which are present and which are absent, extracts picklist values for the
 that drive behaviour, and follows child relationships to discover objects the seed list
 missed. Absence of an object is a finding, not an error: it usually means that module is
 not provisioned.
+
+The output format, and how to read it, is in `references/org-fingerprint-format.md`.
 
 In a chat session with no shell, do the same work with the Salesforce MCP tools:
 `getObjectSchema` for the describes and `soqlQuery` for record counts. Write the results to
