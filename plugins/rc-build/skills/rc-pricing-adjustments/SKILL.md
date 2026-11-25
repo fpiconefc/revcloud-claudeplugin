@@ -77,8 +77,8 @@ shape of the other three rather than observed.
   requirement is a different *rate* for an annual against a monthly commitment — that is a
   second selling model and a second `PricebookEntry`, covered in
   `rc-catalog-selling-models`. `Term` adjusts a price that already exists.
-- **"Enterprise costs more than Flex"** is `Attribute`, when those are values of a product
-  attribute rather than separate products.
+- **"the premium grade costs more than the basic one"** is `Attribute`, when those are
+  values of a product attribute rather than separate products.
 - **"The add-on is 15% off with the platform"** is `Bundle`.
 - **`Custom`** is honest when the logic is a calculation, not a lookup. It is a decision to
   write code; do not pick it to avoid modelling.

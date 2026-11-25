@@ -94,6 +94,27 @@ Prefer the counted form. "Two of the three share it and the order is the odd one
 true and more useful to a reader than "all three differ", because it is what they can keep in
 their head.
 
+#### No catalog data in a SKILL.md
+
+A skill carries no catalog content from any org: no product names, no SKUs or product
+codes, no prices, no attribute names and no attribute values. What you cite from an org is
+**structure, counts and field metadata** — which objects exist, how many rows of which
+shape, what a describe says about a field. Worked examples use invented, generic names, and
+say that they are invented.
+
+The test is simple. If a claim needs a real name to stand up, it is not doctrine: it is an
+implementation note about one customer, and it belongs in the pack, not in a skill.
+
+Two reasons, and the second is the one people miss. Skills get published, shared and read
+by people with no relationship to the org the examples came from. And an example built on
+real catalog data quietly invites the reader to copy the catalog rather than the shape,
+which is the opposite of what a skill is for — the shape travels to any org, the catalog
+travels nowhere.
+
+Counts are not catalog data and should stay. "272 component rows over 240 distinct child
+products" is structure, and it is exactly the kind of evidence a reader needs to judge how
+far to trust the example.
+
 ### 5. Record the deltas
 
 Verification will turn up disagreements between the guide and the org. Those are the most
@@ -129,6 +150,7 @@ review below is not optional:
 
 - Does every Revenue Cloud fact carry DOCS or ORG?
 - Has every quantifier been counted against the table or describe below it?
+- Is the skill free of catalog data — product names, SKUs, prices, attribute names and values?
 - Is every unverifiable thing stated as unverifiable, in the body, where a reader will see it?
 - Would someone following this skill configure something that works?
 - If it writes to an org: is there a preview step, and can it be run twice safely?
