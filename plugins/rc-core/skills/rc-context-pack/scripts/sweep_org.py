@@ -31,12 +31,22 @@ SEED: dict[str, list[str]] = {
         "ProductAttributeDefinition", "ProductSellingModel", "ProductSellingModelOption",
         "ProductComponentGroup", "ProductRelatedComponent", "ProductRelationshipType",
         "ProductComponentGrpOverride", "ProductRelComponentOverride", "UnitOfMeasure",
-        "UnitOfMeasureClass", "ProductRampSegment",
+        "UnitOfMeasureClass", "ProductRampSegment", "AttrPicklistExcludedValue",
+        "AttributeCategoryAttribute", "ProductQualification", "ProductDisqualification",
+        "ProductCategoryQualification", "ProductCategoryDisqual",
+    ],
+    # The configurator decides what a bundle may contain and which flow builds it.
+    # Absent from the seed list until 2026-11-25 although the guide gives it a module
+    # of its own; ProductConfigurationRule is where inclusion and exclusion rules live.
+    "product_configurator": [
+        "ProductConfigurationFlow", "ProductConfigFlowAssignment",
+        "ProductConfigurationRule",
     ],
     "salesforce_pricing": [
         "PricebookEntry", "Pricebook2", "PriceAdjustmentSchedule", "PriceAdjustmentTier",
         "AttributeBasedAdjustment", "BundleBasedAdjustment", "PriceBookEntryDerivedPrice",
-        "CostBook", "CostBookEntry",
+        "CostBook", "CostBookEntry", "AttributeBasedAdjRule",
+        "AttributeAdjustmentCondition", "ProrationPolicy",
     ],
     "rate_management": [
         "RateCard", "RateCardEntry", "RateAdjustmentByTier", "RateAdjustmentByAttribute",
@@ -48,7 +58,10 @@ SEED: dict[str, list[str]] = {
         "OrderSummary", "OrderItemSummary", "OrderItemAdjustmentLineItem",
         "SalesTransactionType", "Contract", "ContractItemPrice", "Asset",
         "AssetStatePeriod", "AssetContractRelationship", "AssetAction", "AssetActionSource",
-        "AssetRelationship",
+        "AssetRelationship", "QuoteLinePriceAdjustment", "AssetActionSrcPriceAdjustment",
+        "OrderAdjustmentGroup", "ContractItemPriceAdjTier", "QuoteLineItemAttribute",
+        "OrderItemAttribute", "AssetAttribute", "AssetStatePeriodAttribute",
+        "QuoteLineRateCardEntry", "OrderItemRateCardEntry",
     ],
     "billing": [
         "BillingSchedule", "BillingScheduleGroup", "BillingPeriodItem", "BillingForecast",
@@ -77,6 +90,16 @@ SEED: dict[str, list[str]] = {
 BEHAVIOUR_FIELDS: dict[str, list[str]] = {
     "ProductSellingModel": ["SellingModelType", "PricingTermUnit", "Status"],
     "PriceAdjustmentSchedule": ["ScheduleType", "AdjustmentMethod"],
+    # TierType is the field a tier is actually set with, and its values are spelled
+    # differently from the read-only AdjustmentType beside it. Lifting it makes the
+    # difference visible in the fingerprint instead of only in a full describe.
+    "PriceAdjustmentTier": ["TierType", "AdjustmentType"],
+    "AttributeBasedAdjRule": ["UsageType"],
+    "AttributeAdjustmentCondition": ["Operator", "UsageType"],
+    "ContractItemPrice": ["AdjustmentMethod"],
+    "ProductConfigurationRule": ["ProcessScope", "RuleType", "RuleSubType", "Status"],
+    "ProductConfigurationFlow": ["Status", "Type", "SubType"],
+    "ProductConfigFlowAssignment": ["AssignmentType"],
     "ProductRelatedComponent": ["ParentProductRole", "ChildProductRole", "QuantityScaleMethod"],
     "ProductCatalog": ["CatalogType"],
     "BillingSchedule": [

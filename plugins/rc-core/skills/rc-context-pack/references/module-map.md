@@ -3,6 +3,23 @@
 How the developer guide's modules map onto objects, and what each module decides in an
 implementation. The object lists live in `sweep_org.py`; this file explains the shape.
 
+## What belongs in the seed list
+
+A module's parent objects are the obvious half. The half that gets forgotten, and did get
+forgotten until 2026-11-25, is the other two kinds:
+
+- **Configuration children.** The rule, condition, qualification or exclusion records that
+  hang off a seeded parent and decide what it does. `AttributeBasedAdjRule` and
+  `AttributeAdjustmentCondition` are the shape: without them, `AttributeBasedAdjustment`
+  describes cleanly and tells you nothing about which attribute values select a price.
+- **Transactional landing objects.** Where a computed result is written. An adjustment
+  lands on `QuoteLinePriceAdjustment`, `OrderItemAdjustmentLineItem` and
+  `AssetActionSrcPriceAdjustment`; an attribute value lands on `QuoteLineItemAttribute`,
+  `OrderItemAttribute`, `AssetAttribute` and `AssetStatePeriodAttribute`.
+
+A seed list with only parents fingerprints an org as provisioned while leaving every
+question about *why a number came out that way* unanswerable from the pack.
+
 ## Product Catalog Management
 
 `ProductCatalog` contains `ProductCategory`, which holds `Product2`. Classification and
@@ -40,6 +57,18 @@ Proportional) and `DoesBundlePriceIncludeChild`.
 CPQ's Product Feature maps to `ProductComponentGroup`; CPQ's Product Option maps to
 `ProductRelatedComponent`. The mapping is close enough to be dangerous: option
 constraints and configuration attributes do not map one-to-one, so verify rather than assume.
+
+Those two objects describe what a bundle *contains*. What it is *allowed* to contain is the
+`product_configurator` module, which the guide gives a section of its own:
+`ProductConfigurationRule` holds the validation, inclusion and exclusion rules, scoped by
+`ProcessScope` (Product, Bundle, Transaction) and `RuleSubType` (Product,
+ProductClassification, BundleProduct, BundleProductClassification, Transaction).
+`ProductConfigurationFlow` and `ProductConfigFlowAssignment` bind a configurator flow to a
+product or classification. CPQ's Product Rules land here, not on the component objects.
+
+`ExpressionSetConstraintObj` belongs to this module per the guide but is absent in
+arm-picone, which the guide itself flags as documented in the Salesforce Object Reference
+rather than here.
 
 ## Transaction Management
 
