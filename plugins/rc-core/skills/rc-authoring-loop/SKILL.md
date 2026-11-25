@@ -34,11 +34,38 @@ should trigger. If either takes a paragraph, the skill is doing two things; spli
 
 Decide and record two properties now, because they change everything downstream:
 
-- **Reads or writes.** A skill that writes to an org carries different obligations:
-  preview before apply, idempotency, and a stated rollback. State it in the body.
+- **Reads or writes.** A skill that writes to an org carries different obligations. See
+  **Skills that write** below; this is the one property that changes what the linter
+  requires of you.
 - **Which pack half it depends on.** A skill resting on ORG facts cannot be verified
   without a fingerprint of a comparable org. If you don't have one, say so in the skill
   rather than guessing.
+
+#### Skills that write
+
+Most skills here read. A skill that creates, updates or deletes a record in an org is a
+different kind of artifact, and it declares itself:
+
+```yaml
+writes: true
+```
+
+The declaration is not decoration. With `writes: true` the linter requires the body to name
+**a preview**, **an explicit confirmation** and **a teardown**, and requires the description
+to tell the reader it writes. A skill that says it never writes while declaring `writes:
+true` fails too. The check exists because these three are what make a write reversible, and
+a skill that omits one of them in its text will omit it in practice.
+
+Do not re-implement the write cycle. `rc-org-writer` in `rc-core` is the contract — spec
+format, the preview / apply / verify / teardown cycle, marking, idempotency, and the
+create-only fields that make correction a delete. A build skill emits a spec and runs it
+through those phases; what belongs in the spec is domain doctrine and belongs to the build
+skill. There is one answer to "how do we write to an org here", and it lives in one place
+for the same reason the pack does: if every build skill invents its own level of care, the
+loosest one sets the standard.
+
+A read-only skill still says so, in the description and in the guardrails. That line is
+what makes the write-capable ones legible as the exception.
 
 ### 2. Ground
 
@@ -162,7 +189,8 @@ from one dev org is worse than no note at all, because it reads as verified.
 python3 scripts/lint_skill.py <path-to-skill-dir>
 ```
 
-The linter checks the mechanical things: frontmatter present and well-formed, description
+The linter checks the mechanical things, and for a skill declaring `writes: true` it
+additionally requires a preview, a confirmation and a teardown to be named in the body: frontmatter present and well-formed, description
 long enough to trigger reliably and containing trigger phrases, description short enough
 for claude.ai to accept (1024 characters — over that it is rejected at upload while
 Claude Code loads it happily, so nothing else catches it), body length, references
@@ -174,6 +202,7 @@ review below is not optional:
 - Does every Revenue Cloud fact carry DOCS or ORG?
 - Has every quantifier been counted against the table or describe below it?
 - Is the skill free of catalog data — product names, SKUs, prices, attribute names and values?
+- If it writes: can every record it creates be found again and removed, and does the body say how?
 - Is every unverifiable thing stated as unverifiable, in the body, where a reader will see it?
 - Would someone following this skill configure something that works?
 - If it writes to an org: is there a preview step, and can it be run twice safely?

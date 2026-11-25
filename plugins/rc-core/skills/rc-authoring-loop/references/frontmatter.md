@@ -55,6 +55,21 @@ are what the description is for. See `notes/distribution-channel-limits.md` in t
 Do not put "when to use" guidance in the body. The body is only read after the skill has
 already triggered, so it is too late to matter there.
 
+## writes
+
+Present and `true` only on a skill that creates, updates or deletes records in an org.
+Absent means read-only, which is what nearly every skill here is.
+
+```yaml
+writes: true
+```
+
+`lint_skill.py` treats it as a contract. A skill declaring it must name a preview, an
+explicit confirmation and a teardown in its body, and must say in its description that it
+writes; declaring it while the description claims the skill never writes is an error. The
+cycle those three belong to is `rc-org-writer`'s, and a write-capable skill uses it rather
+than inventing one.
+
 ## Optional keys
 
 `compatibility` names required tooling when it is not obvious — `sf` CLI, a connector, a

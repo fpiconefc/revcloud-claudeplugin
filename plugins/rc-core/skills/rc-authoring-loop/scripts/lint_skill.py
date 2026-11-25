@@ -7,7 +7,8 @@ sloppiness that is tedious to spot by eye: thin descriptions, descriptions too l
 for claude.ai to accept, orphaned reference files, scripts that do not compile,
 sentences that assert a Revenue Cloud fact without saying where it came from, and
 quantified claims ("all three", "neither", "any two") sitting next to the table that
-settles them -- see "Count every quantifier" in SKILL.md step 4.
+settles them -- see "Count every quantifier" in SKILL.md step 4 -- and a skill that
+declares `writes: true` without naming its preview, confirmation and teardown.
 
 Usage:
     python3 lint_skill.py path/to/skill-dir
@@ -32,6 +33,14 @@ MIN_DESCRIPTION_CHARS = 200
 # upload to claude.ai fails. See notes/distribution-channel-limits.md in the pack.
 MAX_DESCRIPTION_CHARS = 1024
 MAX_BODY_LINES = 500
+
+# A skill that writes to an org declares `writes: true` and must name the three
+# parts of the contract in its body. See "Skills that write" in SKILL.md step 1.
+WRITE_CONTRACT = [
+    ("a preview phase", re.compile(r"\bpreview\b", re.IGNORECASE)),
+    ("an explicit confirmation", re.compile(r"\bconfirm(ation|ed|s|\b)", re.IGNORECASE)),
+    ("a teardown", re.compile(r"\bteardown\b", re.IGNORECASE)),
+]
 
 # Phrases that mark a claim as sourced. A claim-shaped sentence near one of these
 # is treated as marked.
@@ -161,6 +170,27 @@ def lint(skill_dir: Path) -> Report:
             rep.warn("description quotes no trigger phrases; skills under-trigger without them")
         if not re.search(r"\b(not for|rather than|instead of|no para)\b", description, re.I):
             rep.warn("description does not say what the skill is NOT for")
+
+    # --- write capability ---------------------------------------------------
+    writes = (scalar(frontmatter, "writes") or "false").strip().lower() == "true"
+    if writes:
+        for what, pattern in WRITE_CONTRACT:
+            if not pattern.search(body):
+                rep.error(
+                    f"declares `writes: true` but the body never names {what}. A skill "
+                    "that writes to an org states its preview, its confirmation and its "
+                    "teardown where a reader will see them."
+                )
+        if description:
+            if re.search(r"\b(never|does not|doesn't)\s+write", description, re.I):
+                rep.error(
+                    "declares `writes: true` while the description says it never writes"
+                )
+            elif not re.search(r"\bwrite", description, re.I):
+                rep.error(
+                    "declares `writes: true` but the description never tells the reader "
+                    "it writes to an org"
+                )
 
     # --- body --------------------------------------------------------------
     body_lines = body.splitlines()
