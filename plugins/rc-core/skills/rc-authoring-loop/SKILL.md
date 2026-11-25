@@ -77,6 +77,23 @@ A claim that resolves to neither has three honest endings, and only three:
 "Leave it, it's probably right" is not one of them. The probability that a plausible
 Revenue Cloud sentence is correct is not high enough to spend a customer's implementation on.
 
+#### Count every quantifier
+
+A claim carrying **all**, **none**, **every**, **each**, **neither**, **no two** or **any
+two** is a claim about a set, and it is verified by counting the set — against the table
+printed underneath it, or against the describe it came from. Do the count; do not eyeball it.
+
+This is a separate step because the failure has a signature: the generalisation overshoots
+by one notch and the evidence sitting directly below it disproves the sentence. "Renamed on
+each of the three" above a table where two of the three agree. "Does not mean the same thing
+on any two of them" above a table showing two identical rows. "Quantity 10 falls in no tier"
+where four quantities do. Each one is a correct observation stated one step too strongly, and
+each is caught by reading the writer's own table back to them.
+
+Prefer the counted form. "Two of the three share it and the order is the odd one out" is both
+true and more useful to a reader than "all three differ", because it is what they can keep in
+their head.
+
 ### 5. Record the deltas
 
 Verification will turn up disagreements between the guide and the org. Those are the most
@@ -111,6 +128,7 @@ It catches shape, not truth. A skill that lints clean can still be wrong, so the
 review below is not optional:
 
 - Does every Revenue Cloud fact carry DOCS or ORG?
+- Has every quantifier been counted against the table or describe below it?
 - Is every unverifiable thing stated as unverifiable, in the body, where a reader will see it?
 - Would someone following this skill configure something that works?
 - If it writes to an org: is there a preview step, and can it be run twice safely?

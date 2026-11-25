@@ -5,7 +5,9 @@ Checks shape, not truth. A skill that passes can still be wrong; the human revie
 in SKILL.md step 6 is what catches that. What this catches is the mechanical
 sloppiness that is tedious to spot by eye: thin descriptions, descriptions too long
 for claude.ai to accept, orphaned reference files, scripts that do not compile,
-and sentences that assert a Revenue Cloud fact without saying where it came from.
+sentences that assert a Revenue Cloud fact without saying where it came from, and
+quantified claims ("all three", "neither", "any two") sitting next to the table that
+settles them -- see "Count every quantifier" in SKILL.md step 4.
 
 Usage:
     python3 lint_skill.py path/to/skill-dir
@@ -56,6 +58,17 @@ CLAIM_SHAPES = [
 HEDGES = re.compile(r"\b(may|might|typically|usually|generally|in some cases|often)\b", re.IGNORECASE)
 MAX_HEDGE_RATIO = 0.04  # hedges per line of body
 
+# A claim about a set, sitting next to the evidence for it. The repeated failure is a
+# generalisation one notch too strong over a table that disproves it -- "renamed on each
+# of the three" above a table where two of the three agree. Narrow on purpose: only
+# quantifiers that assert set-wide uniformity, and only within a few lines of a table.
+# "never" and "always" are left out; they are legitimate in guardrails and would swamp it.
+QUANTIFIERS = re.compile(
+    r"\b(all (three|four|five|six|of them)|none of|every one|each of the"
+    r"|neither|no two|any two|all \d+)\b",
+    re.IGNORECASE,
+)
+QUANTIFIER_TABLE_WINDOW = 4  # lines either side
 
 
 class Report:
@@ -174,6 +187,20 @@ def lint(skill_dir: Path) -> Report:
                 if not PROVENANCE_MARKERS.search(window):
                     rep.warn(f"line {n}: {why}, no nearby DOCS/ORG marker -- {line.strip()[:70]}")
                 break
+
+    # --- quantified claims next to their evidence --------------------------
+    table_lines = {
+        n for n, line in enumerate(body_lines) if line.lstrip().startswith("|")
+    }
+    for n, line in enumerate(body_lines):
+        if n in table_lines or not QUANTIFIERS.search(line):
+            continue  # a table row is data, not a claim about the table
+        near = range(n - QUANTIFIER_TABLE_WINDOW, n + QUANTIFIER_TABLE_WINDOW + 1)
+        if any(j in table_lines for j in near):
+            rep.warn(
+                f"line {n + 1}: quantified claim beside a table; count the rows before "
+                f"leaving it -- {line.strip()[:70]}"
+            )
 
     # --- bundled resources -------------------------------------------------
     refs_dir = skill_dir / "references"

@@ -14,8 +14,8 @@ pricing engine reads**. Build a `Bundle` schedule and hang tiers off it and noth
 prices, with no error to tell you why.
 
 This skill covers how to pick that type, how to pick the second and independent setting
-that changes the arithmetic (`AdjustmentMethod`), and the four near-homonym field traps
-that make a correct-looking adjustment produce a wrong number. It is read-and-design
+that changes the arithmetic (`AdjustmentMethod`), and the four traps that make a
+correct-looking adjustment produce a wrong number. It is read-and-design
 work. **Nothing here writes to an org.** Where a step needs to look at an org, it looks at
 the knowledge pack's describes, or at read-only SOQL you run yourself.
 
@@ -34,10 +34,25 @@ The base price this skill adjusts is the subject of `rc-catalog-selling-models`.
 question is "why are there two prices for this product", that skill owns it; a price
 adjustment is not how you express a monthly-against-annual rate.
 
+## Without a shell
+
+Step 1 runs a script and step 7 hands you SOQL. In a chat session with no shell, do the same
+work with the Salesforce MCP tools: `getObjectSchema` on the four setup objects and the three
+landing objects returns the describes the script reads, and `soqlQuery` runs every query in
+step 7 and in `references/adjustment-field-map.md` directly. What the script adds over a raw
+describe is the delta checks, and those are written out in **Trap 2** and **Trap 4** — read
+them against the schema the connector returns. Never invent a field name to fill a gap.
+
+## The expensive one, up front
+
+The costliest mistake here is not a field name, it is a tier boundary: the guide documents
+`UpperBound` as exclusive and the one org in the pack is built as though it were inclusive.
+**Trap 1** is that, it leads the trap list for this reason, and it is unresolved.
+
 ## Routing — what varies decides `ScheduleType`
 
-Route on **what makes the price move**, never on the object's name. The customer describes
-a behaviour; the behaviour maps to one of five values; the value selects a child table.
+Route on **what makes the price move**, never on the object's name. The customer describes a
+behaviour, the behaviour maps to one of five values, and the value selects a child table.
 
 | What makes the price vary | `ScheduleType` | Child object to create |
 |---|---|---|
@@ -48,8 +63,8 @@ a behaviour; the behaviour maps to one of five values; the value selects a child
 | Logic none of the above expresses | `Custom` | your own pricing logic |
 
 In arm-picone (2026-11-25) the three schedules partition exactly this way: the `Volume`
-schedule owns all 6 `PriceAdjustmentTier` rows and the `Attribute` and `Bundle` schedules
-own zero tiers between them, carrying 4 `AttributeBasedAdjustment` and 4
+schedule owns the 6 `PriceAdjustmentTier` rows, while the `Attribute` and `Bundle` schedules
+hold zero tiers between them and carry 4 `AttributeBasedAdjustment` and 4
 `BundleBasedAdjustment` rows instead. The guide never states this mapping — it documents
 the four objects separately and gives `ScheduleType` only as a picklist of five values.
 `Term` and `Custom` are unexercised in that org, so their child object is inferred from the
@@ -65,8 +80,8 @@ shape of the other three rather than observed.
 - **"Enterprise costs more than Flex"** is `Attribute`, when those are values of a product
   attribute rather than separate products.
 - **"The add-on is 15% off with the platform"** is `Bundle`.
-- **`Custom`** is the honest answer when the logic is a calculation rather than a lookup.
-  Choosing it is a decision to write code; do not choose it to avoid modelling.
+- **`Custom`** is honest when the logic is a calculation, not a lookup. It is a decision to
+  write code; do not pick it to avoid modelling.
 
 ## The second decision: `Range` or `Slab`
 
@@ -79,9 +94,8 @@ developer guide it is the method for applying tiered pricing:
   a 10% discount for 50 or more items. If a customer orders 50 products, and the type is
   range, apply the 10% discount to all 50 items."
 - **`Slab`** — "Items receive the discount defined for the tier they fall in." The guide's
-  worked case: "suppose that you order 30 products, and the type is slab, you can apply a
-  10% discount to units 1–9, a 20% discount to units 10–19, and a 30% discount to units
-  20–30."
+  worked case: on an order of 30 with the type slab, "apply a 10% discount to units 1–9, a
+  20% discount to units 10–19, and a 30% discount to units 20–30."
 
 So `Range` finds one tier and applies it to every unit. `Slab` splits the quantity across
 bands and prices each band at its own rate.
@@ -92,7 +106,7 @@ Take arm-picone's real tiers for product `01tfn000006KXZeAAO` (observed 2026-11-
 100–249 at 5%, 250–499 at 10%, 500 and up at 15% — and price 300 units at a $100 list
 price. What follows is arithmetic I performed from the guide's definitions, not a run I
 watched: no adjustment has ever been applied in that org. The band split also reads those
-bounds as inclusive, which is the open question in **Trap 4**.
+bounds as inclusive, which is the open question in **Trap 1**.
 
 **`Range`.** 300 falls in the 250–499 tier, so 10% comes off all 300 units:
 
@@ -167,11 +181,10 @@ expensive unexamined field in this graph. All three arm-picone schedules are `Ra
 ### 4. Build the children for that schedule type
 
 **`Volume` and `Term` — tiers.** Per the developer guide: "Tiers can't overlap, and no gaps
-are allowed between tiers." Set `Product2Id` and `ProductSellingModelId` on each tier to
-scope it. `PriceAdjustmentScheduleId` is createable and not updateable in arm-picone, so a
-tier cannot be moved to another schedule — delete and recreate.
-
-Read **Trap 4** below before choosing bound values. It is the highest-risk number here.
+are allowed between tiers." Set `Product2Id` and `ProductSellingModelId` on each tier to scope
+it. `PriceAdjustmentScheduleId` is createable and not updateable in arm-picone, so a tier
+cannot be moved to another schedule — delete and recreate. Settle the bound values against
+**Trap 1** first.
 
 **`Attribute` — a three-record chain.** `AttributeBasedAdjRule` holds the rule;
 `AttributeAdjustmentCondition` holds one condition per attribute, pointing at an
@@ -179,18 +192,10 @@ Read **Trap 4** below before choosing bound values. It is the highest-risk numbe
 attribute's data type; `AttributeBasedAdjustment` ties the rule to the schedule, the
 product and the selling model, and carries the adjustment itself.
 
-arm-picone's chain (2026-11-25) is the canonical shape — one product, one picklist
-attribute named `Type`, four values, four rules, four price overrides:
-
-| Rule | Condition | Adjustment |
-|---|---|---|
-| `Rule_1724814105445` | `Type` equals `Flex` | `Override` 10,000 |
-| `Rule_1724814147720` | `Type` equals `Pre-Prod` | `Override` 12,000 |
-| `Rule_1724814176583` | `Type` equals `Prod` | `Override` 15,000 |
-| `Rule_1724814263993` | `Type` equals `Gov` | `Override` 8,500 |
-
-One rule per outcome, each with `AttributeCount` 1. A picklist attribute's value goes in
-`StringValue`; the wrong typed column leaves the condition inert and raises nothing.
+One rule per outcome, each with `AttributeCount` 1 — arm-picone's four rules over a single
+picklist attribute are tabulated in `references/adjustment-field-map.md`. A picklist
+attribute's value goes in `StringValue`; the wrong typed column leaves the condition inert
+and raises nothing.
 
 **`Bundle` — addressed by path.** `BundleBasedAdjustment` requires three product lookups,
 all create-only in arm-picone: `ProductId` is the component being adjusted,
@@ -201,7 +206,7 @@ unexercised in the data.
 
 ### 5. Set the adjustment type in the right field, in the right spelling
 
-This is **Trap 1** below and it is the single most likely thing to go wrong. Read it before
+This is **Trap 2** below and it is the single most likely thing to go wrong. Read it before
 writing any of these records.
 
 ### 6. Date the records
@@ -243,11 +248,45 @@ nothing has ever been priced through it. A configuration nobody has run is a hyp
 
 Full field inventory with writability in `references/adjustment-field-map.md`.
 
-### Trap 1 — `AdjustmentType` means something different on every object
+### Trap 1 — `UpperBound` is documented exclusive, and the org contradicts it
 
-A field named `AdjustmentType` exists on five objects in this graph and does not mean the
-same thing on any two of them. On `PriceAdjustmentTier` it is **read-only**; the field you
-set there is `TierType`. And the two spellings of the values are not interchangeable.
+The guide is explicit twice. On `UpperBound`: "Must be a positive integer. Not inclusive.
+Set this value one digit higher than the quantity you want the tier to include. For example,
+if a tier's upper bound is 99, set the value of UpperBound to 100." And under Usage: "Tiers
+can't overlap, and no gaps are allowed between tiers."
+
+arm-picone's six active tiers are built as though the bound were inclusive and gaps were
+allowed (observed 2026-11-25):
+
+| Product | Tiers, `LowerBound`–`UpperBound` |
+|---|---|
+| `01tfn000006KYg8AAG` | 5–10, 11–15, 16–open |
+| `01tfn000006KXZeAAO` | 100–249, 250–499, 500–open |
+
+Read with an exclusive upper bound, both sets leak at every internal boundary and at the
+floor. The first covers 5–9, 11–14 and 16 up, so **quantities 10 and 15 fall in no tier**,
+and 1–4 is uncovered. The second covers 100–248, 250–498 and 500 up, so **249 and 499 fall in
+no tier**, and 1–99 is uncovered. Four holes punched mid-schedule plus two uncovered floors:
+one hole at each of the four internal boundaries these tiers have, with not one boundary
+clean.
+
+Read as inclusive, both sets run contiguous from their floor up and nothing leaks. The
+density is the argument — a single bad boundary reads as a typo, but a configuration wrong at
+every boundary and right at none was built by someone reading the bound as inclusive. Both
+schedules are active.
+
+**Do:** do not settle this by reading, including by reading this skill. Price one
+transaction at each boundary quantity in a sandbox and read the adjustment that comes back.
+Until then treat a tier boundary as the highest-risk number in the configuration: an
+off-by-one here misprices exactly one quantity per band, produces a plausible invoice, and
+no validation catches it.
+
+### Trap 2 — `AdjustmentType` is three different fields wearing one name
+
+A field named `AdjustmentType` exists on five objects in this graph, with **three different
+behaviours** between them. The quote and the order are identical — same name, same values,
+same labels — and the other three each differ. On `PriceAdjustmentTier` the field is
+**read-only**, and the one you set there is `TierType`.
 
 | Object | Field you set | Values it accepts |
 |---|---|---|
@@ -267,10 +306,16 @@ Percentage`, which is the first field's *label*, maintained by the platform.
 
 **Do:** set `TierType` on a tier and never attempt its `AdjustmentType`. Use the bare
 spelling on the attribute and bundle objects, the prefixed spelling on the transaction
-objects. The rule that survives: the prefixed form is the engine's and the bare form is the
-definition side's.
+objects.
 
-### Trap 2 — the tier's selling-model fields are a read-only projection
+The invariant is about the **values**, not the field names — on both transaction objects the
+field is plainly called `AdjustmentType` and its values are the prefixed ones. The same three
+concepts carry prefixed values wherever the pricing engine writes them
+(`PriceAdjustmentTier.TierType`, `AdjustmentType` on the quote and the order) and bare values
+on the two objects a person defines by hand (`AttributeBasedAdjustment`,
+`BundleBasedAdjustment`) and on the tier's read-only mirror.
+
+### Trap 3 — the tier's selling-model fields are a read-only projection
 
 `PriceAdjustmentTier` carries `ScheduleType`, `SellingModelType`, `PricingTerm` and
 `PricingTermUnit`, which look like denormalised copies of the parent inviting a "which one
@@ -290,7 +335,7 @@ file or an integration that writes those four fields; the write is dropped, not 
 Whether the projection refreshes when the referenced selling model is edited later is
 untested — they are not formula fields, so staleness is possible.
 
-### Trap 3 — `PricingTermUnit` value `Annual` is labelled `Years`
+### Trap 4 — `PricingTermUnit` value `Annual` is labelled `Years`
 
 On the tier and on both adjustment objects, the `PricingTermUnit` picklist pairs the value
 `Annual` with the label `Years`. Every other value's label equals its value. Both halves of
@@ -301,66 +346,45 @@ Annual—Years or Months".
 **Do:** match on the API value `Annual`. A filter, validation rule, flow decision or
 integration mapping written against the label matches nothing. `TierType` has the same
 shape — labels `Percentage`, `Amount`, `Override` over the prefixed values — which is
-exactly why Trap 1 is easy to walk into from a screenshot of the UI.
-
-### Trap 4 — `UpperBound` is documented exclusive, and the org contradicts it
-
-The guide is explicit twice. On `UpperBound`: "Must be a positive integer. Not inclusive.
-Set this value one digit higher than the quantity you want the tier to include. For example,
-if a tier's upper bound is 99, set the value of UpperBound to 100." And under Usage: "Tiers
-can't overlap, and no gaps are allowed between tiers."
-
-arm-picone's six active tiers are built as though the bound were inclusive and gaps were
-allowed (observed 2026-11-25):
-
-| Product | Tiers, `LowerBound`–`UpperBound` |
-|---|---|
-| `01tfn000006KYg8AAG` | 5–10, 11–15, 16–open |
-| `01tfn000006KXZeAAO` | 100–249, 250–499, 500–open |
-
-Read with an exclusive upper bound, quantity 10 falls in no tier at all — the first band
-ends at 9 and the second starts at 11 — and neither set covers quantity 1. Read as
-inclusive, both sets are contiguous from their floor up. Both schedules are active.
-
-**Do:** do not settle this by reading, including by reading this skill. Price one
-transaction at each boundary quantity in a sandbox and read the adjustment that comes back.
-Until then treat a tier boundary as the highest-risk number in the configuration: an
-off-by-one here misprices exactly one quantity per band, produces a plausible invoice, and
-no validation catches it.
+exactly why Trap 2 is easy to walk into from a screenshot of the UI.
 
 ## Where the adjustment lands — the answer to "why is this price what it is"
 
-An applied adjustment is recorded on three objects, and the cause lookup and the money
-field are spelled differently on each (arm-picone describes, 2026-11-25).
+An applied adjustment is recorded on three objects. The quote and the asset agree on the
+cause lookup and **the order is the odd one out**; the line total is spelled differently on
+the quote and the order, and absent from the asset (arm-picone describes, 2026-11-25).
 
 | Concern | `QuoteLinePriceAdjustment` | `OrderItemAdjustmentLineItem` | `AssetActionSrcPriceAdjustment` |
 |---|---|---|---|
 | Line FK | `QuoteLineItemId` | `OrderItemId` | `AssetActionSourceId` |
-| Cause | `PriceAdjustmentCauseId` | `AdjustmentCauseId` | `PriceAdjustmentCauseId` |
+| Cause | `PriceAdjustmentCauseId` | **`AdjustmentCauseId`** | `PriceAdjustmentCauseId` |
 | Cause targets | tier, promotion | tier, promotion | **promotion only** |
-| Money | `TotalAmount` | `Amount` | `AdjustmentValue` |
+| Line total | `TotalAmount` | `Amount` | **none** |
+| Per-unit value | `AdjustmentValue` | `AdjustmentValue` | `AdjustmentValue` |
+| Applied result | `AppliedAdjustmentAmount` | `AppliedAdjustmentAmount` | `AppliedAdjustmentAmount` |
 | Source | `AdjustmentSource` | `AdjustmentSource` | `PriceAdjustmentSource` |
 | Priority | `Priority` | `Priority` | `PrioritySequence` |
 
-`AdjustmentSource` on the quote and order objects holds `System`, `Discretionary`,
-`Promotion` and `Rule` — which is how a tier-driven price is told apart from a rep's
-override. `AdjustmentAmountScope` holds `Unit`, `Total` and `UnproratedTotal`. Two
-consequences worth designing around:
+`AdjustmentValue` and `AppliedAdjustmentAmount` are the two fields the quote, the order and
+the asset share by name, and the only two — the money that goes in and the money that came
+out. Everything renamed sits around them.
+
+`AdjustmentSource` on the quote and order holds `System`, `Discretionary`, `Promotion` and
+`Rule` — how a tier-driven price is told apart from a rep's override. `AdjustmentAmountScope`
+holds `Unit`, `Total` and `UnproratedTotal`. Two consequences worth designing around:
 
 **The tier reference does not survive into the asset.** `PriceAdjustmentCauseId` on
 `AssetActionSrcPriceAdjustment` references `Promotion` only, where its quote and order
-namesakes reference `PriceAdjustmentTier` as well. If "which tier produced this price" has
-to be answerable after activation, capture it before the asset is created.
+namesakes also reach `PriceAdjustmentTier`. If "which tier produced this price" must be
+answerable after activation, capture it before the asset exists.
 
 **An adjustment can bill on its own line.** Per the developer guide,
-`BillingSchedule.ReferenceEntityItemId` and `InvoiceLine.ReferenceEntityItemId` both refer
-to `OrderItem` **or** `OrderItemAdjustmentLineItem`, and the Place Billing Schedule API
-accepts an `OrderItemAdjustmentLineItem` id directly. An adjustment is not only a number
-folded into the order item's price.
+`BillingSchedule.ReferenceEntityItemId` and `InvoiceLine.ReferenceEntityItemId` both refer to
+`OrderItem` **or** `OrderItemAdjustmentLineItem`. An adjustment is not only a number folded
+into the order item's price; the full downstream list is in the field map.
 
-One more rename, in the same table: `AdjustmentTierId` on the order object points at
-`PromotionTier`, **not** `PriceAdjustmentTier`. The price adjustment tier is reached through
-`AdjustmentCauseId`. Two lookups whose names suggest the opposite of what they do.
+And one order-only lookup to watch: `AdjustmentTierId` points at `PromotionTier`, **not**
+`PriceAdjustmentTier`, which is reached through `AdjustmentCauseId` instead.
 
 ## Deltas — the guide and the org disagree
 
@@ -373,73 +397,63 @@ mapping to the reader.
 
 **2. Neither transaction object has a field reference in the guide.**
 `OrderItemAdjustmentLineItem` appears on 15 pages of the v68 PDF, every one a polymorphic
-relationship list on another object or the Place Billing Schedule parameter table.
-`QuoteLinePriceAdjustment` appears on exactly one page, inside a sample Place Sales
-Transaction payload posting `QuoteLineItemId`, `Name` and `Amount: -25` — and `Amount` is
-not a field on that object in arm-picone, which has `TotalAmount`. The sample is stale, or
-the API accepts an alias; the pack cannot settle which.
+relationship list or the Place Billing Schedule parameter table. `QuoteLinePriceAdjustment`
+appears on one page, in a sample payload posting an `Amount` field the object does not have
+in arm-picone, which has `TotalAmount`. The sample is stale or the API accepts an alias; the
+pack cannot settle which.
 
 **3. Org fields absent from the guide.** `PriceAdjustmentSchedule.ContractId` and
 `.GlobalKey`; `AttributeBasedAdjustment.ScheduleType` and `.AttributeAdjConditionsHash`;
-`BundleBasedAdjustment.ScheduleType`; and `Weekly` in `PricingTermUnit` on all three setup
-objects. `ContractId` is the one that matters — it implies a contract-scoped adjustment
-schedule alongside the price-book-scoped one, which is where contracted pricing would hang
-off this graph. All three arm-picone schedules scope by `Pricebook2Id` and none sets it.
+`BundleBasedAdjustment.ScheduleType`; `Weekly` in `PricingTermUnit` throughout. `ContractId`
+is the one that matters — it is where contracted pricing would hang off this graph. All three
+arm-picone schedules scope by `Pricebook2Id` and none sets it.
 
-**4. The guide lists `TierType`'s values twice in one paragraph**, and the first list omits
-`OverrideAmount`. A reader who stops at the first sentence concludes that override pricing
-is not available on a tier. It is, in both halves of the pack.
-
-**5. `AttributeAdjustmentCondition` cannot be deleted.** Its supported calls in the guide
-omit `delete()` and `undelete()`, while its parent `AttributeBasedAdjRule` has both. Retire
-an attribute rule by deleting the rule, not its conditions.
+**4. Two smaller ones.** The guide lists `TierType`'s values twice in one paragraph and the
+first list omits `OverrideAmount`, so a reader who stops at the first sentence concludes
+override pricing is unavailable on a tier; it is not. And
+`AttributeAdjustmentCondition`'s supported calls omit `delete()` and `undelete()` while its
+parent `AttributeBasedAdjRule` has both — retire a rule by deleting the rule, not its
+conditions.
 
 Precedence applied throughout: ORG wins for what this org has, DOCS wins for what the
 product supports in general.
 
 ## Verified anchors
 
-- **DOCS** — `PriceAdjustmentSchedule` "represents a series of tiered discounts based on the
-  number of items purchased"; `PriceAdjustmentTier` "represents a discount tier in a price
-  adjustment schedule". Both available in API version 60.0 and later, as are
-  `AttributeBasedAdjustment`, `BundleBasedAdjustment`, `AttributeBasedAdjRule` and
-  `AttributeAdjustmentCondition`. (Salesforce Pricing Standard Objects)
+Every field, with its writability and both sources, is in
+`references/adjustment-field-map.md`. The load-bearing ones:
+
+- **DOCS** — `PriceAdjustmentSchedule` is "a series of tiered discounts based on the number of
+  items purchased", `PriceAdjustmentTier` "a discount tier" in one. Both API version 60.0 and
+  later, as are `AttributeBasedAdjustment`, `BundleBasedAdjustment`, `AttributeBasedAdjRule`
+  and `AttributeAdjustmentCondition`. (Salesforce Pricing)
 - **DOCS** — `AdjustmentMethod`: `Range` gives all items the discount of the highest tier the
-  quantity falls in; `Slab` gives items the discount defined for the tier they fall in.
-  Default `Range`. (Salesforce Pricing → PriceAdjustmentSchedule, and the worked examples on
-  Transaction Management → ContractItemPrice)
+  quantity falls in; `Slab` gives items the tier's own discount. Default `Range`. (Salesforce
+  Pricing → PriceAdjustmentSchedule; worked examples on Transaction Management →
+  ContractItemPrice)
 - **DOCS** — Tiers can't overlap and no gaps are allowed between them; `UpperBound` is not
   inclusive and is optional on the last tier. (Salesforce Pricing → PriceAdjustmentTier, Usage)
-- **DOCS** — `AttributeAdjustmentCondition.Operator` accepts nine operators, defaulting to
-  `equals`; `UsageType` on the rule and the condition discriminates `Pricing` from `Rating`.
-  The nine are listed in `references/adjustment-field-map.md`. (Salesforce Pricing)
 - **DOCS** — `BillingSchedule.ReferenceEntityItemId` and `InvoiceLine.ReferenceEntityItemId`
-  refer to `OrderItem` or `OrderItemAdjustmentLineItem`; the Place Billing Schedule
-  `TransactionId__std` parameter accepts the latter. (Billing)
+  refer to `OrderItem` or `OrderItemAdjustmentLineItem`. (Billing)
 - **ORG arm-picone, 2026-11-24 describe** — on `PriceAdjustmentTier`, `TierType` is required
   and writable while `AdjustmentType`, `ScheduleType`, `SellingModelType`, `PricingTerm` and
   `PricingTermUnit` are createable=false and updateable=false; `PriceAdjustmentScheduleId` is
-  createable and not updateable; `PricingTermUnit` pairs value `Annual` with label `Years`
-  and adds `Weekly`.
-- **ORG arm-picone, 2026-11-25 SOQL** — 3 schedules (`Volume`, `Attribute`, `Bundle`, all
-  `Range`, all active, all scoped by one price book, none by contract); 6 tiers under the
-  `Volume` schedule across 2 products; 4 `AttributeBasedAdjustment` + 4 rules + 4 conditions
-  under the `Attribute` schedule; 4 `BundleBasedAdjustment` under the `Bundle` schedule; and
-  **zero** rows in `QuoteLinePriceAdjustment`, `OrderItemAdjustmentLineItem`,
-  `AssetActionSrcPriceAdjustment`, `ContractItemPrice` and `ContractItemPriceAdjTier`.
-- **ORG arm-picone, 2026-11-25 describe** — the quote, order and asset-action adjustment
-  objects rename the cause lookup, the money field, the source and the priority as tabulated
-  above; `AssetActionSrcPriceAdjustment.PriceAdjustmentCauseId` references `Promotion` only
-  and every field on that object is updateable=false.
+  createable and not updateable; `PricingTermUnit` pairs value `Annual` with label `Years`.
+- **ORG arm-picone, 2026-11-25 SOQL** — 3 schedules (`Volume`, `Attribute`, `Bundle`; each
+  `Range`, active, scoped by one price book); 6 tiers under `Volume` across 2 products; 4
+  `AttributeBasedAdjustment` + 4 rules + 4 conditions; 4 `BundleBasedAdjustment`; **zero**
+  rows in all three landing objects, `ContractItemPrice` and `ContractItemPriceAdjTier`.
+- **ORG arm-picone, 2026-11-25 describe** — the three landing objects share only
+  `AdjustmentValue` and `AppliedAdjustmentAmount` by name and rename the cause lookup, line
+  total, source and priority as tabulated above.
 
 ## Not verified
 
 - **No adjustment has ever been applied in arm-picone.** Three empty transaction objects,
-  confirmed by count. Every claim in this skill about what the engine *computes* — Range
-  against Slab arithmetic, tier boundary behaviour, which record wins when two match — rests
-  on the guide's prose and the object graph, never on a run. The `Range`/`Slab` worked example
-  above is arithmetic performed by me from the guide's definitions.
-- **Whether `UpperBound` behaves as exclusive.** Trap 4. The guide says exclusive, the org's
+  confirmed by count. Every claim here about what the engine *computes* — Range against Slab
+  arithmetic, tier boundary behaviour, which record wins when two match — rests on the guide's
+  prose and the object graph, never on a run.
+- **Whether `UpperBound` behaves as exclusive.** Trap 1. The guide says exclusive, the org's
   own tiers are built inclusive, and the org has never priced. This is the gap most likely to
   cost money and I could not close it from the pack.
 - **`Slab`, `Term` and `Custom` are all unexercised.** All three arm-picone schedules are
@@ -459,9 +473,8 @@ product supports in general.
 - **Whether the read-only projection goes stale.** The four projected tier fields are not
   formula fields. Nothing in the pack says what happens to them when the referenced
   `ProductSellingModel` is edited afterwards.
-- **arm-picone is one dev org, and a sparse one.** 3 schedules and 6 tiers is barely a
-  configuration. The four traps are structural — they come from field metadata and the guide,
-  which travel across orgs — but every count, every bound and every worked value here is a
+- **arm-picone is one dev org, and a sparse one.** The traps are structural, from field
+  metadata and the guide, which travel across orgs; every count, bound and worked value is a
   single observation from an org seeded by a tool in August 2024.
 
 ## Guardrails
@@ -469,14 +482,19 @@ product supports in general.
 - **Never create a child object that does not match the schedule's `ScheduleType`.** Tiers
   under a `Bundle` schedule do not price and raise nothing.
 - **Never write `AdjustmentType` on a `PriceAdjustmentTier`.** Set `TierType`. Check the
-  spelling against Trap 1's table every time; the two value sets look interchangeable and are
+  spelling against Trap 2's table every time; the two value sets look interchangeable and are
   not.
-- **Never trust a tier boundary you have not priced.** Trap 4 is unresolved, and it is the
+- **Never trust a tier boundary you have not priced.** Trap 1 is unresolved, and it is the
   one that produces a wrong invoice rather than an error.
 - **Never carry `AdjustmentMethod` across from CPQ on the strength of the shared word.**
   Re-derive it from prices the customer has actually been invoiced.
-- **Never map the quote adjustment to the order adjustment by field name.** The cause lookup
-  and the money field are renamed, and `AdjustmentTierId` points somewhere else entirely.
+- **Three fields break a quote-to-order adjustment mapping, and only three.** The cause
+  lookup (`PriceAdjustmentCauseId` → `AdjustmentCauseId`), the line total (`TotalAmount` →
+  `Amount`), and `AdjustmentTierId`, which exists only on the order and points at
+  `PromotionTier`. The other eight — `AdjustmentValue`, `AppliedAdjustmentAmount`,
+  `AdjustmentSource`, `AdjustmentType`, `AdjustmentAmountScope`, `AdjustmentAction`,
+  `Priority`, `Description` — carry across by name. Map those three explicitly and leave the
+  rest alone.
 - **Do not express a monthly-against-annual rate difference as a price adjustment.** That is a
   second selling model; see `rc-catalog-selling-models`.
 - **Do not promote arm-picone's configuration to doctrine.** It is a dev org whose adjustment
