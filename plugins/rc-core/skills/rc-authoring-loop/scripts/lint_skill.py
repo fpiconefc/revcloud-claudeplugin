@@ -7,8 +7,9 @@ sloppiness that is tedious to spot by eye: thin descriptions, descriptions too l
 for claude.ai to accept, orphaned reference files, scripts that do not compile,
 sentences that assert a Revenue Cloud fact without saying where it came from, and
 quantified claims ("all three", "neither", "any two") sitting next to the table that
-settles them -- see "Count every quantifier" in SKILL.md step 4 -- and a skill that
-declares `writes: true` without naming its preview, confirmation and teardown.
+settles them -- see "Count every quantifier" in SKILL.md step 4 -- a skill that declares
+`writes: true` without naming its preview, confirmation and teardown, a SKILL.md that names
+an org, and a PLATFORM claim with no API version.
 
 Usage:
     python3 lint_skill.py path/to/skill-dir
@@ -36,6 +37,19 @@ MAX_BODY_LINES = 500
 
 # A skill that writes to an org declares `writes: true` and must name the three
 # parts of the contract in its body. See "Skills that write" in SKILL.md step 1.
+# Org aliases a SKILL.md must never name. Read from the pack when it is present, so a
+# newly fingerprinted org is covered without editing this file, plus the ones this repo
+# has used. A literal match, which is why it is cheap and produces no false positives.
+KNOWN_ORG_ALIASES = {"arm-picone", "devorgtestluca"}
+PACK_ORGS = Path.home() / ".claude" / "knowledge" / "revenue-cloud" / "orgs"
+
+# A PLATFORM claim is field metadata and must say which API version it was verified at.
+# Only the marker form counts -- bolded `**PLATFORM ...**` in an anchor or a table cell.
+# Prose that names the category ("the traps are PLATFORM, not ORG") is not a claim and is
+# deliberately not matched, which is what keeps this check free of false positives.
+PLATFORM_MARKER = re.compile(r"\*\*\s*PLATFORM[^*]*\*\*")
+API_VERSION = re.compile(r"\(\s*v\d+", re.IGNORECASE)
+
 WRITE_CONTRACT = [
     ("a preview phase", re.compile(r"\bpreview\b", re.IGNORECASE)),
     ("an explicit confirmation", re.compile(r"\bconfirm(ation|ed|s|\b)", re.IGNORECASE)),
@@ -170,6 +184,28 @@ def lint(skill_dir: Path) -> Report:
             rep.warn("description quotes no trigger phrases; skills under-trigger without them")
         if not re.search(r"\b(not for|rather than|instead of|no para)\b", description, re.I):
             rep.warn("description does not say what the skill is NOT for")
+
+    # --- no skill names an org ----------------------------------------------
+    aliases = set(KNOWN_ORG_ALIASES)
+    if PACK_ORGS.is_dir():
+        aliases |= {d.name for d in PACK_ORGS.iterdir() if d.is_dir()}
+    for alias in sorted(aliases):
+        if alias in body or (description and alias in description):
+            rep.error(
+                f"names the org {alias!r}. No SKILL.md names an org: field metadata is "
+                "PLATFORM and does not need one, and a count belongs in the pack's notes/. "
+                "See 'No skill names an org' in references/provenance.md."
+            )
+
+    # --- a PLATFORM claim carries its API version -----------------------------
+    for n, line in enumerate(body.splitlines(), start=1):
+        for marker in PLATFORM_MARKER.findall(line):
+            if not API_VERSION.search(marker):
+                rep.error(
+                    f"line {n}: PLATFORM claim with no API version -- {marker.strip()}. "
+                    "Write '**PLATFORM (v68 describe)**': metadata moves when the package "
+                    "moves, so a version-less claim cannot be rechecked."
+                )
 
     # --- write capability ---------------------------------------------------
     writes = (scalar(frontmatter, "writes") or "false").strip().lower() == "true"

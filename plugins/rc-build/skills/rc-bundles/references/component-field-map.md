@@ -1,11 +1,11 @@
 # Field map — bundle composition objects
 
 Two sources throughout. **DOCS** is the Revenue Lifecycle Management developer guide, v68
-PDF, swept 2026-11-24. **ORG** is the arm-picone describe sweep of 2026-11-25 plus a
-read-only SOQL pass the same day. Where they disagree the row says so.
+PDF, swept 2026-11-24. **PLATFORM** is field metadata from a v68 describe, which is the
+same in any org on that API version. Where the two disagree the row says so. A handful of
+**ORG** notes record what one org had loaded on 2026-11-25, and are marked as such.
 
-No catalog content appears here. What is cited from the org is structure, counts and field
-metadata.
+No catalog content appears here, and no org is named: field metadata does not need one.
 
 ## Where the guide documents these objects, and where it does not
 
@@ -31,7 +31,7 @@ the best available DOCS statement of what the base field means, and say so when 
 
 ## ProductComponentGroup
 
-19 fields in the org describe; 8 of them yours to set. ORG arm-picone, 2026-11-25.
+19 fields; 8 of them yours to set. PLATFORM (v68 describe).
 
 | Field | Type | Write | Notes |
 |---|---|---|---|
@@ -50,7 +50,7 @@ inside one bundle and is not shared between bundles.
 
 ## ProductRelatedComponent
 
-30 fields in the org describe; 14 of them yours to set. ORG arm-picone, 2026-11-25.
+30 fields; 14 of them yours to set. PLATFORM (v68 describe).
 
 | Field | Type | Write | Notes |
 |---|---|---|---|
@@ -79,7 +79,7 @@ inside one bundle and is not shared between bundles.
 ### The role picklists and their labels
 
 Every value differs from its label on both role picklists, and on the
-`ProductRelationshipType` fields they project from. ORG arm-picone, 2026-11-25.
+`ProductRelationshipType` fields they project from. PLATFORM (v68 describe).
 
 | Field | Value | Label |
 |---|---|---|
@@ -128,7 +128,7 @@ cardinality is overridden"), `MinBundleComponents`, `MaxBundleComponents` and `I
 The mechanism: the same group or component behaves differently depending on which **root**
 bundle it is reached through. A sub-bundle reused under two parents can be required in one
 and optional in the other without duplicating the component row. Both override objects are
-empty in arm-picone, so nothing here is observed working.
+empty in the one org available for checking, so nothing here is observed working.
 
 ## Read-only verification queries
 

@@ -205,7 +205,7 @@ def main() -> int:
         for item in findings:
             print(f"  - {item}")
     else:
-        print("  Nothing unexpected against the v68 guide and arm-picone's shape.")
+        print("  Nothing unexpected against the v68 guide and the reference shape.")
 
     print()
     print("Read-only: this script touched no org, wrote nothing, and printed no")

@@ -67,7 +67,8 @@ ProductClassification, BundleProduct, BundleProductClassification, Transaction).
 product or classification. CPQ's Product Rules land here, not on the component objects.
 
 `ExpressionSetConstraintObj` belongs to this module per the guide but is absent in
-arm-picone, which the guide itself flags as documented in the Salesforce Object Reference
+the org used for checking, which the guide itself flags as documented in the Salesforce
+Object Reference
 rather than here.
 
 ## Transaction Management

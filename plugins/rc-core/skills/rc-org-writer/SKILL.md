@@ -47,8 +47,8 @@ problem entirely, and nothing in this contract covers it.
 
 ## The target, and what the real risk is
 
-The working target is **arm-picone**, a demo org with catalogs, selling models, components
-and billing schedules loaded and in use. The risk there is not breaking production. It is
+The working target is a **demo org** with catalogs, selling models, components and billing
+schedules loaded and in use. The risk there is not breaking production. It is
 **dirtying or overwriting demo material** — leaving half-built records in a catalog someone
 is about to present, or editing a record that was already doing a job.
 
@@ -65,7 +65,7 @@ comparable to each other. `assets/spec-template.yaml` is the shape:
 ```yaml
 spec: rc-org-writer/v1
 target:
-  org: arm-picone
+  org: <target-org-alias>
 author: <who is accountable>
 created: '2026-11-25'
 purpose: >
@@ -202,7 +202,7 @@ listed so a human can finish the job.
 
 Every record this skill creates must be identifiable as created by it. Which mechanism is
 available is **per object**, and for most objects the answer is "none". Surveyed across the
-109 objects the pack describes for arm-picone (2026-11-25):
+109 objects the pack seeds and describes — PLATFORM (v68 describe):
 
 | Route | Objects | Mechanism |
 |---|---|---|
@@ -210,11 +210,11 @@ available is **per object**, and for most objects the answer is "none". Surveyed
 | **Tier 2** | 22 | no unique field, but `Name` is createable: a reserved prefix |
 | **Tier 3** | 70 | `Name` is autonumbered, read-only or absent: nothing fits on the record |
 
-**`GlobalKey` was the obvious candidate and it is not enough.** It is createable, updateable,
-unique and idLookup — so where it exists it solves authorship and idempotency in one field,
-and an upsert on it is exactly once. It exists on three objects: `PriceAdjustmentSchedule`,
-`Pricebook2` and `ProductRelationshipType`. `Code` behaves identically on ten more. That is
-13 objects with a standard key out of 109.
+**`GlobalKey` was the obvious candidate and it is not enough.** PLATFORM (v68 describe) has
+it createable, updateable, unique and idLookup — so where it exists it solves authorship and
+idempotency in one field, and an upsert on it is exactly once. It exists on three objects:
+`PriceAdjustmentSchedule`, `Pricebook2` and `ProductRelationshipType`. `Code` behaves
+identically on ten more. That is 13 objects with a standard key out of 109.
 
 **Tier 3 is the common case, and it is the junctions.** `PriceAdjustmentTier`,
 `ProductRelatedComponent`, `ProductSellingModelOption`, `PricebookEntry`,
@@ -298,17 +298,17 @@ is a change to make.
 Per-object detail, with the counts behind the tier table, in
 `references/marking-and-idempotency.md`.
 
-- **ORG arm-picone, 2026-11-25 describe** — of 109 objects, 17 have a createable, unique,
+- **PLATFORM (v68 describe)** — of the 109 objects the pack seeds, 17 have a createable, unique,
   idLookup field; 22 have no such field but a createable `Name`; 70 have neither. `GlobalKey`
   is createable, updateable, unique, idLookup and 80 characters on `PriceAdjustmentSchedule`,
   `Pricebook2` and `ProductRelationshipType`, and appears on no other object in the pack.
   `Code` has the same properties on 10 objects.
-- **ORG arm-picone, 2026-11-25 describe** — `Product2.ExternalId`, `.ProductCode` and
+- **PLATFORM (v68 describe)** — `Product2.ExternalId`, `.ProductCode` and
   `.StockKeepingUnit` are createable and updateable with `unique: false` and
   `idLookup: false`; `Product2.Name` is idLookup and not unique.
-- **ORG arm-picone, 2026-11-24 describe** — `PriceAdjustmentTier.PriceAdjustmentScheduleId`
+- **PLATFORM (v68 describe)** — `PriceAdjustmentTier.PriceAdjustmentScheduleId`
   is createable and not updateable, so a tier cannot be reparented.
-- **ORG arm-picone, 2026-11-25 describe** — `ProductRelatedComponent.Name` is not createable;
+- **PLATFORM (v68 describe)** — `ProductRelatedComponent.Name` is not createable;
   `ParentProductId`, `ChildProductId`, `ChildProductClassificationId` and
   `ParentSellingModelId` are createable and not updateable.
 - **DOCS** — `AttributeAdjustmentCondition`'s supported calls omit `delete()` and
@@ -330,9 +330,10 @@ Per-object detail, with the counts behind the tier table, in
 - **What the platform normalises.** The expected-difference list in the reference is
   assembled from field metadata and the other skills' findings, not from a verify run that
   produced them.
-- **arm-picone is one org**, and the 17/22/70 split is its describes. Another org with
-  different custom fields splits differently, which is why the validator reads the target
-  org's describes rather than trusting this table.
+- **The 17/22/70 split counts the objects this pack seeds**, and four of the 17 rest on
+  custom fields that exist in one org rather than in Revenue Cloud. An org with different
+  custom fields splits differently, which is why the validator reads the target org's own
+  describes rather than trusting this table.
 
 ## For a build skill that uses this one
 

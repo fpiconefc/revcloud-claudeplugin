@@ -89,7 +89,7 @@ and interleaving them produces a hedged, unreadable skill.
 ### 4. Verify, claim by claim
 
 Go back through the draft and mark every factual claim about Revenue Cloud. For each one,
-resolve it to **DOCS**, **PLATFORM**, **ORG**, or **neither**.
+resolve it to `DOCS`, `PLATFORM`, `ORG`, or none of them.
 
 `references/provenance.md` defines what counts as a claim, the three sources and how to mark
 them. The short version: object names, field names, picklist values, writability, API
@@ -99,12 +99,13 @@ from a definition are not.
 The three sources differ by how far they travel, and getting this wrong is what makes a skill
 read as doctrine when it is somebody's configuration:
 
-- **DOCS** — the v68 guide. Best practice and intended behaviour. This is what structures the
+- `DOCS` — the v68 guide. Best practice and intended behaviour. This is what structures the
   body of a skill.
-- **PLATFORM** — field metadata verified by describe: writability, picklist values and
+- `PLATFORM` — field metadata verified by describe: writability, picklist values and
   labels, required, defaults. It comes from the managed package, so it is the same in any org
-  on the same API version. **It carries that version and never names an org.**
-- **ORG** — counts, distributions, how one org is loaded. It structures nothing. In a
+  on the same API version. **It carries that version and never names an org**, and the linter
+  fails a marker written without one.
+- `ORG` — counts, distributions, how one org is loaded. It structures nothing. In a
   `SKILL.md` it is legitimate for exactly two things: showing where the guide and reality
   disagree, and declaring what could not be verified. Everything else goes to `notes/`.
 
@@ -189,9 +190,9 @@ far to trust the example.
 Verification will turn up disagreements between the guide and the org. Those are the most
 valuable output of the whole loop, and they are lost unless written down immediately.
 
-For what the product supports in general, **DOCS wins**. For whether a field is writable,
-required or read-only and what a picklist holds, **PLATFORM wins** — the describe is the
-org's own answer and the guide is frequently behind it. Never average them, and never quietly
+For what the product supports in general, `DOCS` wins. For whether a field is writable,
+required or read-only and what a picklist holds, `PLATFORM` wins — the describe is the org's
+own answer and the guide is frequently behind it. Never average them, and never quietly
 pick one.
 
 Write each delta to `~/.claude/knowledge/revenue-cloud/notes/` with: what the guide says,
@@ -200,8 +201,8 @@ topic, appended to over time. `references/notes-protocol.md` has the format and 
 about what does *not* belong there.
 
 The discipline that matters most: an ORG observation from a development or demo org is **not
-doctrine**, and belongs in `notes/` rather than in a skill. Dev orgs carry leftovers from experiments. Mark such observations as
-unvalidated until a customer org confirms them. A plausible pattern promoted to doctrine
+doctrine**, and belongs in `notes/` rather than in a skill. Dev orgs carry leftovers from
+experiments. Mark such observations as unvalidated until a customer org confirms them. A plausible pattern promoted to doctrine
 from one dev org is worse than no note at all, because it reads as verified.
 
 ### 6. Review before commit
@@ -220,8 +221,8 @@ actually referenced from the body, scripts compiling, and unmarked claim-shaped 
 It catches shape, not truth. A skill that lints clean can still be wrong, so the human
 review below is not optional:
 
-- Does every Revenue Cloud fact carry DOCS, PLATFORM or ORG, and every PLATFORM claim an
-  API version?
+- Does every Revenue Cloud fact carry one of the three sources, and every `PLATFORM` marker
+  an API version?
 - Does the skill name an org anywhere? It must not.
 - Has every quantifier been counted against the table or describe below it?
 - Is the skill free of catalog data — product names, SKUs, prices, attribute names and values?

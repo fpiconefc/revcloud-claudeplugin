@@ -1,14 +1,15 @@
 # Marking and idempotency — what the org lets you prove
 
-Sources: the arm-picone describe sweep of 2026-11-25 (109 objects) and the Revenue
-Lifecycle Management developer guide, v68 PDF, swept 2026-11-24.
+Sources: PLATFORM field metadata from a v68 describe across the 109 objects the pack
+seeds, and the Revenue Lifecycle Management developer guide, v68 PDF, swept 2026-11-24.
+Counts of objects are counts of the seed list, not of anyone's data.
 
 The question this file answers: when this skill creates a record, what on that record
 proves it was us? The answer is object by object, and for most objects it is **nothing**.
 
 ## The survey
 
-Across the 109 objects the pack describes for arm-picone:
+Across the 109 objects the pack seeds and describes, PLATFORM (v68 describe):
 
 | | Objects |
 |---|---|
@@ -23,7 +24,7 @@ contract, and the reason the run log is a first-class artifact rather than a con
 
 These 17 carry a field that is createable, unique and idLookup, so an upsert on it is
 exactly once. Of the 17, **13 use a standard field** and 4 depend on a field that exists
-in arm-picone and is not part of Revenue Cloud:
+in one org and is not part of Revenue Cloud:
 
 **`GlobalKey`, 3 objects.** `PriceAdjustmentSchedule`, `Pricebook2`,
 `ProductRelationshipType`. Createable, updateable, unique, idLookup, 80 characters. The
@@ -38,7 +39,7 @@ unique nonetheless.
 
 **Org-specific, 4 objects.** `CreditMemo.CreditMemoNumber` is a document number the
 platform assigns, not something to write. `Product2.Integration_Key__c` and
-`Website_Request_Id__c` on `Order` and `Quote` are **custom fields in arm-picone**. Do not
+`Website_Request_Id__c` on `Order` and `Quote` are **custom fields in one org**. Do not
 build the contract on them: a spec that keys `Product2` on `Integration_Key__c` works in
 one org and fails everywhere else. If a target org has an equivalent, a spec may use it,
 and must say so in `purpose`.
@@ -80,7 +81,7 @@ most of. The ones that matter here, with why the marker fails:
 
 A tier-3 record is ours when the record it hangs off is ours **and it cannot be moved
 off it**. `PriceAdjustmentTier.PriceAdjustmentScheduleId` is required and createable but
-not updateable (ORG arm-picone, 2026-11-24), so a tier created under our schedule stays
+not updateable — PLATFORM (v68 describe) — so a tier created under our schedule stays
 under our schedule for life. That is a sound inheritance: delete the schedule's tiers at
 teardown and you are deleting only ours.
 
@@ -102,7 +103,7 @@ creates attribute conditions as not cleanly reversible, and say so in its `purpo
 ## Create-only fields make correction a delete
 
 A field that is createable and not updateable cannot be fixed in place. Known cases, all
-ORG arm-picone:
+PLATFORM (v68 describe):
 
 | Field | Object |
 |---|---|

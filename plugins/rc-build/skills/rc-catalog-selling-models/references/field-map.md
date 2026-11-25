@@ -1,15 +1,16 @@
 # Field map — selling models, price and lineage
 
-Two sources throughout. **DOCS** is the Revenue Lifecycle Management developer guide,
-v68 PDF, swept 2026-11-24. **ORG** is the arm-picone describe sweep of 2026-11-24. Where
-they disagree the row says so.
+Two sources throughout. **DOCS** is the Revenue Lifecycle Management developer guide, v68
+PDF, swept 2026-11-24. **PLATFORM** is field metadata from a v68 describe, which is the same
+in any org on that API version. Where they disagree the row says so, and no org is named:
+field metadata does not need one.
 
 ## ProductSellingModel
 
 Defines one method by which a product is sold (DOCS, Salesforce Pricing). Available in API
 version 60.0 and later. A product can have several.
 
-| Field | Type | ORG arm-picone | DOCS |
+| Field | Type | PLATFORM (v68) | DOCS |
 |---|---|---|---|
 | `Name` | string, required | present | present |
 | `SellingModelType` | picklist, required, default OneTime | OneTime, TermDefined, Evergreen | same three |
@@ -32,7 +33,7 @@ version 60.0 and later.
 The guide documents this object **twice**, with different field lists, and only one of
 them matches an RCA org.
 
-| Field | Salesforce Pricing section (DOCS) | Product Catalog Management section (DOCS) | ORG arm-picone |
+| Field | Salesforce Pricing section (DOCS) | Product Catalog Management section (DOCS) | PLATFORM (v68) |
 |---|---|---|---|
 | `Product2Id` | documented | — | present |
 | `ProductSellingModelId` | documented | — | present |
@@ -58,7 +59,7 @@ selling model option before you create values in a price book entry."
 Represents an association between a Pricebook2 and a Product2 (DOCS). Available in API
 version 60.0 and later.
 
-| Field | ORG arm-picone | Note |
+| Field | PLATFORM (v68) | Note |
 |---|---|---|
 | `Pricebook2Id` | reference → Pricebook2, required | can't be changed on update (DOCS) |
 | `Product2Id` | reference → Product2, required | can't be changed on update (DOCS) |
@@ -74,7 +75,7 @@ selling model × currency**.
 
 ## Where billing frequency lives — three names for one idea
 
-All ORG arm-picone, 2026-11-24. The guide's Order Item and Quote Line Item field sections
+All PLATFORM (v68 describe). The guide's Order Item and Quote Line Item field sections
 document none of these names; `BillingFrequency2` appears in the v68 PDF only inside
 sample order payloads.
 
@@ -96,7 +97,7 @@ Changing the frequency after the fact is gated by `BillingTreatment.CanChangeBil
 
 ## Term fields that carry the Weekly delta
 
-ORG arm-picone. Each of these picklists holds Months, Quarterly, Semi-Annual, **Weekly**,
+ORG the one org available for checking. Each of these picklists holds Months, Quarterly, Semi-Annual, **Weekly**,
 Annual:
 
 - `ProductSellingModel.PricingTermUnit`
@@ -109,7 +110,7 @@ OneTime, Day, Month, Quarter, Semi-Annual, Year and BillingMilestonePlan.
 
 ## The lineage chain
 
-ORG arm-picone unless marked.
+ORG the one org available for checking unless marked.
 
 | Object | Points at the product | Points at the selling model |
 |---|---|---|

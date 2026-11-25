@@ -1,8 +1,10 @@
 # Field map — price adjustment objects
 
 Two sources throughout. **DOCS** is the Revenue Lifecycle Management developer guide, v68
-PDF, swept 2026-11-24. **ORG** is the arm-picone describe sweep of 2026-11-24 plus a
-read-only SOQL pass of 2026-11-25. Where they disagree the row says so.
+PDF, swept 2026-11-24. **PLATFORM** is field metadata from a v68 describe, which is the same
+in any org on that API version. Where the two disagree the row says so. A few **ORG** notes
+record what one org had loaded, read 2026-11-25, and are marked as such. No org is named:
+field metadata does not need one.
 
 Writability below is the org describe's `createable` / `updateable`, which is what a load
 actually obeys. The guide expresses the same thing as the presence of `Create` and
@@ -14,7 +16,7 @@ DOCS: "Represents a series of tiered discounts based on the number of items purc
 Available in API version 60.0 and later. 21 fields in the org describe counting the audit
 set; 12 of them yours to set.
 
-| Field | Type | Write | ORG arm-picone | DOCS |
+| Field | Type | Write | PLATFORM (v68) | DOCS |
 |---|---|---|---|---|
 | `Name` | string, required | C+U | present | present |
 | `Description` | textarea | C+U | present | present |
@@ -40,7 +42,7 @@ Supported calls include `delete()` and `undelete()` (DOCS).
 DOCS: "Represents a discount tier in a price adjustment schedule." Available in API version
 60.0 and later. 25 fields in the org describe; 10 of them yours to set.
 
-| Field | Type | Write | ORG arm-picone | DOCS |
+| Field | Type | Write | PLATFORM (v68) | DOCS |
 |---|---|---|---|---|
 | `PriceAdjustmentScheduleId` | lookup, required | **C only** | present | present |
 | `LowerBound` | double, required | C+U | present | positive integer, ≤ upper bound |
@@ -68,7 +70,7 @@ are `calculated: false`, so they are platform-maintained rather than formulas.
 
 DOCS Usage: "To use PriceAdjustmentTiers, associate them with a PriceAdjustmentSchedule.
 Tiers can't overlap, and no gaps are allowed between tiers." See
-`notes/price-adjustments.md` in the pack for how arm-picone's own tiers contradict the
+`notes/price-adjustments.md` in the pack for how one org's own tiers contradict the
 exclusive-upper-bound rule.
 
 ## AttributeBasedAdjustment
@@ -77,7 +79,7 @@ DOCS: "Represents the association between the product selling model and the pric
 adjustment for product or service being sold based on its attributes." Available in API
 version 60.0 and later. 25 fields in the org describe; 7 yours to set.
 
-| Field | Type | Write | ORG arm-picone | DOCS |
+| Field | Type | Write | PLATFORM (v68) | DOCS |
 |---|---|---|---|---|
 | `PriceAdjustmentScheduleId` | lookup, required | C only | present | present |
 | `AttributeBasedAdjRuleId` | lookup, required | C only | present | present |
@@ -99,8 +101,7 @@ Note `EffectiveFrom` is required here and nillable on the tier and the schedule.
 ## AttributeBasedAdjRule and AttributeAdjustmentCondition
 
 Both DOCS, both API version 60.0 and later. Neither is in the pack's 87-object describe
-set — both are present in arm-picone's `discovered_not_in_seed` list and were described
-live on 2026-11-25.
+set — both were discovered through child relationships and described live on 2026-11-25.
 
 `AttributeBasedAdjRule`: `Name` (C+U), `OwnerId`, `UsageType` picklist `Pricing` | `Rating`
 (C+U), `AttributeCount` (read-only). Supports `delete()`.
@@ -115,10 +116,10 @@ one typed value column per data type — `StringValue`, `IntegerValue`, `DoubleV
 `greaterthan`, `lessorequal`, `lessthan`, `matches`, `notequals`.
 
 A picklist attribute's condition uses `StringValue` — observed on all four conditions in
-arm-picone, each over one `AttributeDefinition` whose `DataType` is `Picklist`. Writing the
-value into the wrong typed column leaves the condition inert; nothing errors.
+one org, each over a single `AttributeDefinition` whose `DataType` is `Picklist`. Writing
+the value into the wrong typed column leaves the condition inert; nothing errors.
 
-### The attribute chain instantiated — arm-picone, 2026-11-25
+### The attribute chain instantiated — one observed instance
 
 One product, one picklist attribute, four of its values, four rules, four price overrides.
 Each rule carries `AttributeCount` 1 and each condition holds its value in `StringValue`.
@@ -142,7 +143,7 @@ DOCS: "Represents the association between the product selling model and the pric
 adjustment for a product or service being sold as a bundle." Available in API version 60.0
 and later. 26 fields in the org describe; 9 yours to set.
 
-| Field | Type | Write | ORG arm-picone | DOCS |
+| Field | Type | Write | PLATFORM (v68) | DOCS |
 |---|---|---|---|---|
 | `PriceAdjustmentScheduleId` | lookup, required | C only | present | present |
 | `ProductId` | lookup → Product2, required | C only | the component being adjusted | present |
@@ -161,7 +162,7 @@ and later. 26 fields in the org describe; 9 yours to set.
 
 The three product lookups are all required and all create-only. A bundle adjustment is
 addressed by **path**, not by product: the same component can price differently under a
-different root or a different immediate parent. In arm-picone all four records have
+different root or a different immediate parent. Where it could be checked every record has
 `ParentProductId` equal to `RootBundleId`, so the distinction between the two is present
 in the schema and unexercised in the data.
 
@@ -169,7 +170,7 @@ in the schema and unexercised in the data.
 
 Three objects, none of them carrying the same field names. The quote and order describes
 are in the pack; `AssetActionSrcPriceAdjustment` and `QuoteLinePriceAdjustment` were
-described live in arm-picone on 2026-11-25 because the pack's seed list omits both.
+described live on 2026-11-25 because the pack's seed list omitted both.
 
 | Concern | `QuoteLinePriceAdjustment` (20 fields) | `OrderItemAdjustmentLineItem` (29 fields) | `AssetActionSrcPriceAdjustment` (17 fields) |
 |---|---|---|---|
@@ -184,7 +185,7 @@ described live in arm-picone on 2026-11-25 because the pack's seed list omits bo
 | Priority | `Priority` | `Priority` | `PrioritySequence` |
 | Order-only | — | `TotalTaxAmount`, `TotalAmtWithTax`, `CouponCode`, `AppliedPromotionDate`, `OrderAdjustmentGroupId`, `AdjustmentBasisReferenceId` → `Coupon`, `AdjustmentTierId` → `PromotionTier`, `RelatedAdjustmentLineItemId` | — |
 
-Shared picklists on the quote and order objects (ORG arm-picone, 2026-11-25):
+Shared picklists on the quote and order objects, PLATFORM (v68 describe):
 
 - `AdjustmentSource`: `System`, `Discretionary`, `Promotion`, `Rule`
 - `AdjustmentAmountScope`: `Unit`, `Total`, `UnproratedTotal`
@@ -218,14 +219,15 @@ Neither `OrderItemAdjustmentLineItem` nor `QuoteLinePriceAdjustment` has a field
 section anywhere in the 2555-page v68 guide. The first appears only in polymorphic
 relationship lists and the parameter table above; the second appears on one page, inside a
 sample Place Sales Transaction payload posting `QuoteLineItemId`, `Name` and `Amount: -25`
-— and `Amount` is not a field on the object in arm-picone, which has `TotalAmount`.
+— and `Amount` is not a field on the object at all, which has `TotalAmount` instead.
 
 ## Adjacent, and out of scope here
 
 - `ContractItemPrice` (API 61.0+, DOCS) carries its own `AdjustmentMethod` with the same
   Range/Slab pair, plus `DiscountType` and `DiscountValue` per its history object. It
   prices a product **on a contract** rather than above a price book list price.
-  `ContractItemPriceAdjTier` is its tier child. Both are empty in arm-picone.
+  `ContractItemPriceAdjTier` is its tier child. Both were empty wherever it was possible to
+  check.
 - `RateAdjustmentByTier` and `RateAdjustmentByAttribute` are the rate-management twins of
   the tier and attribute objects, for usage rating. `AttributeBasedAdjRule.UsageType =
   Rating` is the same rule object serving that side. Rate cards are out of scope for this

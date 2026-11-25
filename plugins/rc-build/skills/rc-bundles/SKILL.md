@@ -60,10 +60,10 @@ yourself.
 
 ## A worked shape — one bundle, twelve groups, forty components
 
-This is the largest bundle in arm-picone, read on 2026-11-25. **Every name below is
-invented.** What is observed is the structure and the counts: the group tree, how the forty
-components distribute across it, the nesting depth, and the flag mix. No product name, code
-or price from that org appears here or anywhere else in this skill.
+The largest bundle in the one org available for checking, read on 2026-11-25. **Every name
+below is invented.** What is observed is the structure: the group tree, how the forty
+components distribute across it, the nesting depth and the flag mix. No product name, code or
+price appears here or anywhere else in this skill.
 
 ```
 Managed Service Bundle                      (the parent Product2)
@@ -164,12 +164,12 @@ cart". `Constant` and `Proportional`, defaulting to `Proportional`.
 `Proportional` means ten of the parent brings ten times the component. `Constant` means the
 component quantity holds regardless of the parent.
 
-**The field is nillable, and null is a third state that the pack cannot explain.** In
-arm-picone 93 of 272 component rows have no value, against 178 `Proportional` and 1
-`Constant` — so null is the second most common setting in the only org available, not a
-stray. What the engine does with null, and whether it falls back to the documented default,
-is not something either half of the pack answers. Set it explicitly and the question does not
-arise.
+**The field is nillable, and null is a third state nothing explains.** PLATFORM (v68
+describe) has it nillable with a default of `Proportional`, and in the one org available for
+checking null is the second most common setting of the three, not a stray. So the default
+does not always apply on whatever path records are loaded through. What the engine does with
+null — fall back to `Proportional`, or treat it as unset — is answered by neither the
+guide nor a describe. Set it explicitly and the question does not arise.
 
 ### `DoesBundlePriceIncludeChild`
 
@@ -209,8 +209,8 @@ Both objects also have an **override** sibling — `ProductComponentGrpOverride`
 product. The mechanism they describe is that the same group or component behaves differently
 depending on which root bundle it is reached through, so a shared sub-bundle can be required
 under one parent and optional under another without duplicating rows. Both override objects
-are empty in arm-picone, so none of that is observed working. `references/component-field-map.md`
-has their full field lists.
+are empty in the one org available for checking, so none of that is observed working.
+`references/component-field-map.md` has their full field lists.
 
 ## Where bundles end and pricing begins
 
@@ -239,8 +239,8 @@ Full field inventory, with writability and both sources, in
 ### Trap 1 — the bundle pattern is chosen on a third object, and is create-only
 
 `ParentProductRole` and `ChildProductRole` on `ProductRelatedComponent` are the fields that
-say whether this is a Bundle, a Set or an AddOn. Both are **read-only** in arm-picone's
-describe (2026-11-25): createable false, updateable false. You cannot set either one.
+say whether this is a Bundle, a Set or an AddOn. Both are **read-only** — PLATFORM (v68
+describe): createable false, updateable false. You cannot set either one.
 
 What you set is `ProductRelationshipTypeId`, a **required** lookup. The
 `ProductRelationshipType` it points at carries `MainProductRoleCat` and
@@ -252,7 +252,7 @@ And on `ProductRelationshipType` both role fields are **create-only**: createabl
 updateable false. A relationship type's pattern is fixed once the record exists.
 
 One asymmetry inside that pair will catch a load. **`MainProductRoleCat` is required and
-`AssociatedProductRoleCat` is nillable** (arm-picone describe, 2026-11-25). On an object whose
+`AssociatedProductRoleCat` is nillable** — PLATFORM (v68 describe). On an object whose
 entire purpose is the role pair, half of it is optional: a relationship type can declare what
 the parent is and say nothing about the child. The guide documents the nillable half and not
 the required one, which is delta 3 below, so the half you are obliged to populate is the half
@@ -268,7 +268,7 @@ the v68 guide, so the describe is the only source for either.
 The role vocabulary is **nine values**, carried on **four fields** — the parent role and the
 child role, each appearing once on the component as a read-only projection and once on the
 relationship type as the create-only original. Four parent values, five child values, and not
-one of the nine equals its label. ORG arm-picone, 2026-11-25:
+one of the nine equals its label. PLATFORM (v68 describe):
 
 | Field pair | Value | Label |
 |---|---|---|
@@ -331,31 +331,32 @@ the Salesforce Object Reference, outside this guide.
 **Do:** cite an override field's description as the best DOCS statement of what the matching
 base field means, and say that is what you are doing. Every quotation in this skill is marked
 that way. Do not assume the override's documented default — `false` for
-`DoesBundlePriceIncludeChild` — holds on the base object, where arm-picone's describe reports
-no default at all.
+`DoesBundlePriceIncludeChild` — holds on the base object, where a v68 describe reports no
+default at all.
 
-## What one org actually has
+## Composing the five flags
 
-Everything above is field semantics and travels to any org. This section is one org's data,
-and is weaker evidence. Two flag combinations account for 231 of arm-picone's 272 component
-rows (2026-11-25):
+The flags are independent, so the combinations are what a design actually chooses. Derived
+from the field semantics above, not from any org's data: these are the settings each
+customer intent implies.
 
-| | Required | Default | Qty editable | `QuantityScaleMethod` | Price included | Rows |
-|---|---|---|---|---|---|---|
-| **A** | no | yes | no | `Proportional` | yes | 153 |
-| **B** | no | no | yes | null | no | 78 |
+| The customer's intent | Required | Default | Qty editable | `QuantityScaleMethod` | Price included |
+|---|---|---|---|---|---|
+| part of the product, not a choice | true | true | false | `Proportional` | true |
+| included, and they may drop it | false | true | false | `Proportional` | true |
+| included, priced separately on the quote | false | true | false | `Proportional` | false |
+| optional add-on, they set how many | false | false | true | `Constant` | false |
+| optional, and it scales with the parent | false | false | false | `Proportional` | false |
+| one seat per seat of the parent, fixed | true | true | false | `Proportional` | true |
 
-A reads as all-inclusive: selected from the start, quantity follows the parent, price folded
-into the bundle. B reads as à la carte: off by default, buyer sets the quantity, prices on
-its own line. The remaining 41 rows spread across eight further combinations.
+Two readings of that table are worth naming because they are the shapes customers describe.
+**All-inclusive**: default on, quantity following the parent, price folded in — the buyer
+chooses the bundle and nothing inside it. **À la carte**: default off, quantity editable,
+priced on its own line — the bundle is a shell and every line is a decision.
 
-**Read this as an observation with a count, not as a norm.** arm-picone is a development org
-seeded by a tool in August 2024. A combination appearing 153 times there is either the
-natural shape of bundle modelling or a template applied in bulk, and the pack cannot tell
-those apart — the more so given that component reuse is almost nil (272 rows over 240
-distinct child products) and the distribution is this lopsided. The worked shape above is
-from the same org and contains **zero** A-pattern rows, which is the clearest argument
-available that A is concentrated rather than universal.
+Most catalogs mix the two inside one bundle, which is why the flags are per component and not
+per bundle. What the flags cannot express is "one of these three"; that is group cardinality,
+and it is the routing table at the top.
 
 ## Configuration rules — named, not described
 
@@ -369,8 +370,8 @@ classification, a bundle or a transaction.
 tries to express an inclusion rule through `IsComponentRequired` is solving the wrong
 problem.
 
-That is the extent of what this skill will say. **arm-picone has zero
-`ProductConfigurationRule` records.** The object is seeded in the pack and empty, so there is
+That is the extent of what this skill will say. **The one org available for checking has
+zero `ProductConfigurationRule` records.** The object is present and empty, so there is
 no case to read, no worked example, and nothing to verify beyond the field metadata. Naming
 the values of `ProcessScope` and `RuleSubType` here would be describing a picklist, not a
 practice. This earns its own skill when an org with rules in it is available.
@@ -428,48 +429,51 @@ Field-by-field detail is in `references/component-field-map.md`. The load-bearin
   associated component plays in the relationship", with `BundleComponent` and
   `ClassificationComponent` described; the latter arrived in API version 61.0. (Product
   Catalog Management Fields on Standard Objects)
-- **ORG arm-picone, 2026-11-25 describe** — on `ProductRelatedComponent`,
-  `ParentProductRole`, `ChildProductRole`, `UnitOfMeasureId` and `Name` are createable false
-  and updateable false; `ParentProductId`, `ChildProductId`, `ChildProductClassificationId`
-  and `ParentSellingModelId` are create-only; `ProductRelationshipTypeId` is required;
-  `DoesBundlePriceIncludeChild` is required with no default. On `ProductRelationshipType`
-  both role categories are create-only, `MainProductRoleCat` is required with 4 values and
-  `AssociatedProductRoleCat` is nillable with 5 — nine role values over four fields in all.
-- **ORG arm-picone, 2026-11-25 SOQL** — 272 component rows over 240 distinct child products
-  and 120 groups; 272 of 272 are Bundle → BundleComponent; `IsComponentRequired` true on 3;
-  `QuantityScaleMethod` Proportional 178, null 93, Constant 1; 7 groups carry a
-  `ParentGroupId` and all 7 belong to one bundle; 3 groups have no component pointing at them
-  and those 3 are that bundle's containers; 105 of 120 groups set neither minimum nor maximum
-  and 10 are at 1–1; 0 component rows have a null group.
+- **PLATFORM (v68 describe)** — on `ProductRelatedComponent`, `ParentProductRole`,
+  `ChildProductRole`, `UnitOfMeasureId` and `Name` are createable false and updateable false;
+  `ParentProductId`, `ChildProductId`, `ChildProductClassificationId` and
+  `ParentSellingModelId` are create-only; `ProductRelationshipTypeId` is required;
+  `DoesBundlePriceIncludeChild` is required with no default; `QuantityScaleMethod` is
+  nillable, restricted, defaulting to `Proportional`.
+- **PLATFORM (v68 describe)** — on `ProductRelationshipType` both role categories are
+  create-only, `MainProductRoleCat` is required with 4 values and `AssociatedProductRoleCat`
+  is nillable with 5: nine role values over four fields in all, no value equal to its label.
+- **ORG** — the counts behind **Not verified** below come from the one org available for
+  checking, read 2026-11-25. They are there to bound what was observed, not to describe how a
+  bundle should be built; the full figures, dated and attributed, are in `notes/bundles.md`
+  in the pack.
 
 ## Not verified
 
-- **The constraint plane is barely exercised.** 105 of 120 groups set no cardinality at all
-  and 10 sit at 1–1, so "pick exactly one" is the only constrained shape with more than a
-  handful of instances. Nothing here about how the runtime enforces a minimum or a maximum
-  rests on an observation.
-- **Set and AddOn are unexercised.** `ParentProductRole` offers four patterns and all 272
-  rows are `Bundle`. How a Set differs from a Bundle at runtime is not observable from this
-  pack, and the guide's own description of the roles is the one-line gloss on
-  `AssociatedProductRoleCat`.
-- **Nesting is exercised once.** 7 of 120 groups nest, all inside a single bundle, two levels
-  deep. Whether a third level behaves is untested, and "a group holds components or child
-  groups, never both" is a pattern read off one bundle, not a rule the platform states.
-- **Null `QuantityScaleMethod` is unexplained.** 93 rows. Delta 5.
-- **Both override objects are empty.** Context-dependent cardinality is documented and
-  unobserved, so the shared-sub-bundle argument above is read off the object graph and the
-  guide's field descriptions.
-- **`ProductConfigurationRule` has zero records.** Nothing about rule evaluation, precedence
-  or interaction with the component flags is verified at all.
-- **Component reuse is almost nil.** 272 rows over 240 distinct children, so claims about
-  sharing a sub-bundle between parents are unverified in practice.
+- **The constraint plane is barely exercised.** In the one org available most groups set no
+  cardinality at all, and of those that do, "pick exactly one" is the only shape with more
+  than a handful of instances. Nothing here about how the runtime enforces a minimum or a
+  maximum rests on an observation.
+- **Set and AddOn are unobserved.** The picklist offers four patterns and the one org
+  available for checking exercises only `Bundle` — not a single Set or AddOn row. How a Set
+  differs from a Bundle at runtime cannot be read off a describe, and the guide's whole
+  description of the roles is the one-line gloss on `AssociatedProductRoleCat`.
+- **Nesting is exercised once.** In the one org available, every nested group belongs to a
+  single bundle and goes two levels deep. Whether a third level behaves is untested, and "a
+  group holds components or child groups, never both" is a pattern read off that one bundle,
+  not a rule the platform states.
+- **Null `QuantityScaleMethod` is unexplained.** Common enough in the one org available to
+  rule out a stray, and nothing says what the engine does with it. Delta 5.
+- **Both override objects are empty** wherever it was possible to check. Context-dependent
+  cardinality is documented and unobserved, so the shared-sub-bundle argument above is read
+  off the object graph and the guide's field descriptions.
+- **`ProductConfigurationRule` has zero records** in the one org available. Nothing about
+  rule evaluation, precedence or interaction with the component flags is verified at all.
+- **Component reuse is almost nil** where it could be checked — barely more component rows
+  than distinct child products — so claims about sharing a sub-bundle between parents are
+  unverified in practice.
 - **I did not watch a bundle configure.** Every statement about what the buyer can and cannot
   do rests on field semantics and the guide's prose, not on a cart I drove. Before promising
   a customer that a flag combination behaves a particular way, build it in their sandbox and
   configure it once.
-- **arm-picone is one development org**, seeded by a tool in August 2024. The traps are
-  structural, from field metadata and the guide, and travel across orgs. Every count here is
-  a single observation.
+- **One org was available for checking**, a development org seeded by a tool in August 2024.
+  The traps are PLATFORM — field metadata and the guide — and travel to any org on the
+  same API version. Every count above is a single observation and travels nowhere.
 
 ## Guardrails
 

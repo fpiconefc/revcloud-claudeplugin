@@ -130,6 +130,19 @@ def run_sf(args: list[str]) -> dict | None:
         return None
 
 
+def api_version(org: str) -> str | None:
+    """The API version the describes were taken at.
+
+    Every PLATFORM claim in a skill cites this, because field metadata moves when the
+    managed package moves. A fingerprint without it cannot be rechecked.
+    """
+    payload = run_sf(["sf", "org", "display", "--target-org", org, "--json"])
+    if not payload:
+        return None
+    result = payload.get("result") or {}
+    return result.get("apiVersion") or result.get("instanceApiVersion")
+
+
 def describe(obj: str, org: str) -> dict | None:
     payload = run_sf(["sf", "sobject", "describe", "--sobject", obj, "--target-org", org, "--json"])
     if not payload:
@@ -220,8 +233,14 @@ def main() -> int:
                 if name and name not in seeded:
                     (noise if is_noise(name) else discovered).add(name)
 
+    version = api_version(args.org)
+    if version is None:
+        print("warning: could not read the org's API version; PLATFORM claims verified "
+              "against this fingerprint will have no version to cite.", file=sys.stderr)
+
     fingerprint = {
         "org": args.org,
+        "api_version": version,
         "swept_at": datetime.now(timezone.utc).isoformat(),
         "modules": {
             m: {
@@ -240,7 +259,8 @@ def main() -> int:
     lines = [
         f"# Revenue Cloud org fingerprint — {args.org}",
         "",
-        f"Swept {fingerprint['swept_at']}. Read-only describe sweep.",
+        f"Swept {fingerprint['swept_at']} against API version "
+        f"{fingerprint['api_version'] or 'unknown'}. Read-only describe sweep.",
         "",
         "## Modules",
         "",

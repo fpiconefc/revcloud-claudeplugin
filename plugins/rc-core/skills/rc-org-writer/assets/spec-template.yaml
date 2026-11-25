@@ -8,7 +8,7 @@
 spec: rc-org-writer/v1
 
 target:
-  org: arm-picone
+  org: <target-org-alias>
   modules: salesforce_pricing
 
 author: <who is accountable for this run>

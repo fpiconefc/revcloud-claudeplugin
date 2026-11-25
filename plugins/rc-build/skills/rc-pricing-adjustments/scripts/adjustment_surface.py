@@ -35,7 +35,7 @@ GUIDE_SCHEDULE_FIELDS = [
 ]
 
 # ScheduleType -> the child object the engine reads for that type.
-# Volume/Attribute/Bundle are observed in arm-picone; Term and Custom are inferred.
+# Volume/Attribute/Bundle were observed in a reference org; Term and Custom are inferred.
 CHILD_FOR_SCHEDULE_TYPE = {
     "Volume": ("PriceAdjustmentTier", "observed"),
     "Term": ("PriceAdjustmentTier", "inferred"),
@@ -136,7 +136,7 @@ def report_schedule(describe_dir: Path, findings: list[str]) -> list[str]:
     for name in ("Product2Id", "ProductSellingModelId", "SellingModelType"):
         if name in f:
             findings.append(
-                f"PriceAdjustmentSchedule has {name}, which arm-picone does not. "
+                f"PriceAdjustmentSchedule has {name}, which the reference describe does not. "
                 "Product scoping may work differently here."
             )
     if "Product2Id" not in f:
@@ -145,7 +145,7 @@ def report_schedule(describe_dir: Path, findings: list[str]) -> list[str]:
     if "ContractId" in f:
         findings.append(
             "PriceAdjustmentSchedule.ContractId is present and undocumented in the v68 "
-            "guide. It implies a contract-scoped schedule; unexercised in arm-picone."
+            "guide. It implies a contract-scoped schedule, and no org checked exercises it."
         )
     for name in sorted(set(f) - set(GUIDE_SCHEDULE_FIELDS)):
         if name == "GlobalKey":
@@ -251,7 +251,7 @@ def report_tier(describe_dir: Path, findings: list[str]) -> None:
     ]
     if writable_projection:
         findings.append(
-            "These are writable here and read-only in arm-picone: "
+            "These are writable here and read-only in the reference describe: "
             + ", ".join(writable_projection)
             + ". They can diverge from the selling model in this org."
         )
@@ -375,7 +375,7 @@ def main() -> int:
         for item in findings:
             print(f"  - {item}")
     else:
-        print("  Nothing unexpected against the v68 guide and arm-picone's shape.")
+        print("  Nothing unexpected against the v68 guide and the reference shape.")
 
     print()
     print("Read-only: this script touched no org and wrote nothing.")

@@ -10,8 +10,8 @@ The catalog decision that costs the most to reverse is the one that looks smalle
 you get two prices for the same thing. Cloning `Product2` into "Widget Monthly" and
 "Widget Annual" renders correctly in the catalog, prices correctly on the quote, and
 fails twelve months later — because amendment, renewal and cancellation are addressed by
-asset (developer guide), and an asset points at exactly one product (arm-picone describe,
-2026-11-24).
+asset (developer guide), and an asset points at exactly one product — PLATFORM (v68
+describe).
 
 This skill covers the shape of that decision: what a selling model is for, what a billing
 frequency is for, and where the price attaches. It is read-and-design work. **Nothing
@@ -27,7 +27,7 @@ This skill leans on **both halves of the pack**. The object graph and the API ve
 floors come from the developer guide; what a given org actually exposes comes from its
 fingerprint, and the two disagree in ways that change the design (see **Deltas** below).
 Without a fingerprint of the org you are designing for, treat every ORG line here as
-arm-picone's configuration and not as yours.
+one org's configuration and not as yours.
 
 ## Routing
 
@@ -67,7 +67,7 @@ price attaches, and which of the three places billing frequency lives are presen
 writes nothing and touches no org.
 
 Run it for the org you are designing for. If that org has no fingerprint in the pack, say
-so in the design rather than assuming arm-picone's shape.
+so in the design rather than assuming another org's shape.
 
 ### 2. Classify each requirement with the routing table
 
@@ -89,12 +89,15 @@ Two reasons to keep the library small, both verified:
 - **It is the join key of the whole price side.** One model shared by a few hundred
   products is one row to reason about when pricing goes wrong.
 
-In arm-picone (swept 2026-11-24) the whole catalog runs on **nine** canonical models —
-One-Time, plus Term and Evergreen crossed with Monthly, Quarterly, Semi-Annual and Annual.
-The usage is lopsided and that is healthy: 258 One-Time, 37 Term Annual, 15 Term Monthly,
-9 Evergreen Monthly, 1 Evergreen Annual.
+The library you want is the cross-product of the selling-model types with the pricing terms
+the business actually sells on, and nothing else: One-Time, plus Term and Evergreen crossed
+with the term units in use. That is usually under a dozen models for a whole catalog, and the
+usage across them will be heavily lopsided — which is healthy, not a sign of sprawl. A long
+tail of one-off models is the symptom to look for.
 
-Name them for the terms, not for the product: `Term Annual`, not `Additional API Annual`.
+Name them for the terms, not for the product: `Term Annual`, not `<product name> Annual`. A
+model named after a product cannot be reused by a second product, and reuse is the entire
+point.
 
 ### 4. Attach the product to each selling model
 
@@ -133,26 +136,26 @@ Two guide rules that bite during load: the standard price for a product must be 
 before any custom price, and a price book entry can never be deleted — only deactivated
 with `IsActive`.
 
-### 6. Worked case — Additional API in arm-picone
+### 6. Worked case — one product, three selling models
 
-Observed in arm-picone, 2026-11-24. One product, three selling models, three price book
-entries:
+**Names and amounts below are invented**; the shape is one observed in a real catalog. One
+`Product2`, three selling models, three price book entries:
 
 | Product | Selling model | SellingModelType | PricingTerm / Unit | UnitPrice | IsDefault |
 |---|---|---|---|---|---|
-| Additional API | Term Annual | TermDefined | 1 / Annual | 15,000 | true |
-| Additional API | Term Monthly | TermDefined | 1 / Months | 1,500 | false |
-| Additional API | Evergreen Monthly | Evergreen | 1 / Months | 2,000 | false |
+| `<product>` | Term Annual | TermDefined | 1 / Annual | 15,000 | true |
+| `<product>` | Term Monthly | TermDefined | 1 / Months | 1,500 | false |
+| `<product>` | Evergreen Monthly | Evergreen | 1 / Months | 2,000 | false |
 
 Read the economics off the table: 1,500 × 12 = 18,000 against 15,000 annual, a 16.7%
-commitment discount, and Evergreen priced 33% above the termed monthly for the privilege
-of cancelling. Three different prices per month of service. That spread is exactly what
-makes this row two of the routing table and not row one — no billing-frequency setting can
+commitment discount, and Evergreen priced 33% above the termed monthly for the privilege of
+cancelling. Three different prices per month of service. That spread is exactly what makes
+this row two of the routing table and not row one — no billing-frequency setting can
 produce it, because billing frequency changes when you invoice, not what a month costs.
 
-One `Product2`, so one asset lineage: the selling model on the next transaction changes,
-the identity of the thing the customer owns does not. I did not watch that move execute
-in this org — see **Not verified** before promising it to a customer.
+One `Product2`, so one asset lineage: the selling model on the next transaction changes, the
+identity of the thing the customer owns does not. Nobody watched that move execute — see
+**Not verified** before promising it to a customer.
 
 ### 7. Verify the design before anyone builds it
 
@@ -163,12 +166,12 @@ Read-only SOQL. Run these yourself; this skill does not run them for you.
 SELECT Product2.Name, ProductSellingModel.Name, ProductSellingModel.SellingModelType,
        ProductSellingModel.PricingTerm, ProductSellingModel.PricingTermUnit, IsDefault
 FROM ProductSellingModelOption
-WHERE Product2.Name = 'Additional API'
+WHERE Product2.Name = '<the product>'
 
 -- Every option should have a price; an option without one is a dead end at quoting.
 SELECT Product2.Name, ProductSellingModel.Name, UnitPrice, CurrencyIsoCode, IsActive
 FROM PricebookEntry
-WHERE Product2.Name = 'Additional API'
+WHERE Product2.Name = '<the product>'
 
 -- Library size. A number near the product count means the library sprawled.
 SELECT COUNT(Id) FROM ProductSellingModel WHERE Status = 'Active'
@@ -188,7 +191,7 @@ two entries, the rep picks one, the quote prices, the order activates. What it b
 the part nobody tests during a build.
 
 **Asset lineage is per product.** `Asset.Product2Id` points to one product, and in
-arm-picone (2026-11-24) `Asset` carries no selling-model field at all. The selling model is
+a v68 describe `Asset` carries no selling-model field at all. The selling model is
 recorded one level down, on `AssetActionSource.ProductSellingModelId`, per transaction.
 So the object graph says: the product is the identity of the thing the customer owns, and
 the selling model is a property of each event in its history.
@@ -202,7 +205,7 @@ change it to this other product".
 Initiate Swap exchanges one product for another; Initiate Upgrade moves a lower-tier
 product to a higher-tier one, and in doing so the original asset receives an asset action
 with an Upgrade category while *a new asset is created* with a linked action. In
-arm-picone, `AssetAction.CategoryEnum` and `AssetAction.Subtype` carry the matching
+a v68 describe, `AssetAction.CategoryEnum` and `AssetAction.Subtype` carry the matching
 values — Swaps, Upgrades, Downgrades, and `SwapIn`/`SwapOut`/`UpgradeFrom`/`UpgradeTo`.
 
 Put together, the consequence of cloning the product. The left column is what the object
@@ -222,14 +225,14 @@ monthly asset until the first renewal cycle runs.
 
 ## Deltas — the guide and the org disagree
 
-Found while verifying this skill against arm-picone (describe sweep 2026-11-24) and the
-Revenue Lifecycle Management developer guide (v68 PDF, swept 2026-11-24). Full field
-inventory in `references/field-map.md`.
+Found while verifying this skill against a v68 describe and the Revenue Lifecycle Management
+developer guide (v68 PDF, swept 2026-11-24). Full field inventory in
+`references/field-map.md`.
 
 **1. `ProductSellingModelOption` has no `Minimum`, `Maximum` or `Increment` here.** The
 guide's Salesforce Pricing section documents the object with `Description`, `DisplayName`,
 `Increment`, `Maximum` and `Minimum`, and attaches the "requires Industries EPC" caveat to
-`IsDefault` alone. In arm-picone the object has 14 fields — the audit set plus
+`IsDefault` alone. PLATFORM (v68 describe) has the object at 14 fields — the audit set plus
 `ProductSellingModelId`, `Product2Id`, `ProrationPolicyId` and `IsDefault` — and none of
 the five. The guide's *Product Catalog Management* section documents only `IsDefault`, with
 no EPC caveat, and that section matches the org. **Design consequence:** you cannot bound
@@ -237,7 +240,7 @@ the subscription term on the option in an RCA org without EPC. Constrain the ter
 offering specific selling models instead.
 
 **2. `OrderItem` uses `BillingFrequency2`; `QuoteLineItem` uses `BillingFrequency`.** Both
-hold the same six values in arm-picone — MilestonePlan, Weekly, Monthly, Quarterly,
+hold the same six values — MilestonePlan, Weekly, Monthly, Quarterly,
 Semi-Annual, Annual — under different API names, and `OrderItem` has no field named
 `BillingFrequency` at all. The same rename hits `BillingReference` → `BillingReference2`.
 The guide documents neither name in its Order Item or Quote Line Item field sections;
@@ -247,14 +250,14 @@ consequence:** any quote-to-order field mapping, flow or integration that carrie
 frequency across breaks silently, and no document warns you.
 
 **3. `ProductSellingModel.PricingTermUnit` offers Weekly here.** The guide lists Months,
-Quarterly, Semi-Annual and Annual. arm-picone's describe adds **Weekly**, and the same
+Quarterly, Semi-Annual and Annual. A v68 describe adds **Weekly**, and the same
 extra value shows on `QuoteLineItem.PricingTermUnit`, `QuoteLineItem.SubscriptionTermUnit`
 and `Asset.RenewalTermUnit`. **Design consequence:** weekly terms are available in this
 org; confirm in the target org's describe before designing on them, because the guide does
 not promise them.
 
 **4 (bonus). `ProductSellingModel.DoesAutoRenewAssetByDefault` is undocumented.** The field
-exists in arm-picone as a required boolean defaulting to false, and the string does not
+exists in a v68 describe as a required boolean defaulting to false, and the string does not
 appear anywhere in the v68 guide PDF. It sits exactly where a selling-model design wants
 it — the renewal default travels with the terms. Treat it as real but unpromised, and set
 it deliberately rather than inheriting the default.
@@ -287,13 +290,15 @@ product supports in general.
   (Transaction Management → Resources, Actions)
 - **DOCS** — Access to `BillingTreatment` needs the Billing Admin permission set; its
   `CanChangeBillingFrequency` boolean defaults to false. (Billing → BillingTreatment)
-- **ORG arm-picone, 2026-11-24** — `ProductSellingModel`: `SellingModelType` is OneTime,
+- **PLATFORM (v68 describe)** — `ProductSellingModel`: `SellingModelType` is OneTime,
   TermDefined or Evergreen; `PricingTermUnit` adds Weekly; `Status` is Draft, Inactive or
   Active; `DoesAutoRenewAssetByDefault` is present.
-- **ORG arm-picone, 2026-11-24** — Additional API sells on three selling models over one
-  `Product2`, with the prices in the worked case above. Nine canonical selling models
-  across the catalog.
-- **ORG arm-picone, 2026-11-24** — `Asset` holds `Product2Id` and no selling-model field;
+- **ORG** — the worked case above is the shape of a real catalog entry read 2026-11-24, on
+  invented names and amounts: one product on three selling models over a single `Product2`,
+  priced so that annual, monthly and evergreen each cost differently per month of service.
+  The figures and the library behind it are in `notes/monthly-vs-annual-pattern.md` in the
+  pack.
+- **PLATFORM (v68 describe)** — `Asset` holds `Product2Id` and no selling-model field;
   `AssetActionSource` holds `ProductSellingModelId`.
 
 ## Not verified
@@ -303,15 +308,17 @@ product supports in general.
   a run I watched. Before promising a customer that monthly → annual is a clean amendment,
   execute it once in their sandbox and read the resulting `AssetAction` and
   `AssetActionSource` rows.
-- **Whether arm-picone has Industries EPC.** The org has `IsDefault`, which the guide marks
+- **Whether the org checked has Industries EPC.** It has `IsDefault`, which the guide marks
   EPC-dependent, and lacks `Minimum`/`Maximum`/`Increment`, which the guide does not mark.
   One of those two facts means the guide's EPC marking is on the wrong field; I could not
   settle which from the pack alone.
-- **Whether the nine-model library in arm-picone is a deliberate standard or an accumulation.**
-  It reads as deliberate — the naming is consistent and the reuse is high — but that is an
-  inference from the data, not something the org records. Ask before copying it as doctrine.
-- **arm-picone is one org.** Every ORG line here is a single observation. The three deltas
-  are the kind that hold across orgs, and none of them is confirmed in a second org yet.
+- **Whether a small, reused selling-model library is a deliberate standard or an
+  accumulation.** In the one catalog available for checking it read as deliberate, since the
+  naming was consistent and the reuse high, but that is an inference from the data rather than
+  something an org records. Ask before copying any library as doctrine.
+- **One org was available for checking.** The deltas are PLATFORM — field metadata against
+  the guide — so they hold on any org at the same API version, but none is confirmed against
+  a second package version yet.
 
 ## Guardrails
 

@@ -62,13 +62,12 @@ behaviour, the behaviour maps to one of five values, and the value selects a chi
 | Sitting inside a bundle | `Bundle` | `BundleBasedAdjustment` |
 | Logic none of the above expresses | `Custom` | your own pricing logic |
 
-In arm-picone (2026-11-25) the three schedules partition exactly this way: the `Volume`
-schedule owns the 6 `PriceAdjustmentTier` rows, while the `Attribute` and `Bundle` schedules
-hold zero tiers between them and carry 4 `AttributeBasedAdjustment` and 4
-`BundleBasedAdjustment` rows instead. The guide never states this mapping — it documents
-the four objects separately and gives `ScheduleType` only as a picklist of five values.
-`Term` and `Custom` are unexercised in that org, so their child object is inferred from the
-shape of the other three rather than observed.
+The guide never states this mapping — it documents the four objects separately and gives
+`ScheduleType` only as a picklist of five values. In the one org available for checking the
+partition is exact: the `Volume` schedule owns every tier row and the `Attribute` and
+`Bundle` schedules own none, carrying their own child objects instead. `Term` and `Custom`
+have no instances there, so their child object is inferred from the shape of the other three
+rather than observed.
 
 ### Reading the requirement
 
@@ -102,11 +101,10 @@ bands and prices each band at its own rate.
 
 ### The same configuration, two prices
 
-Take arm-picone's real tiers for product `01tfn000006KXZeAAO` (observed 2026-11-25) —
-100–249 at 5%, 250–499 at 10%, 500 and up at 15% — and price 300 units at a $100 list
-price. What follows is arithmetic I performed from the guide's definitions, not a run I
-watched: no adjustment has ever been applied in that org. The band split also reads those
-bounds as inclusive, which is the open question in **Trap 1**.
+Take an illustrative three-tier schedule — 100–249 at 5%, 250–499 at 10%, 500 and up at
+15% — and price 300 units at a $100 list price. What follows is arithmetic performed from
+the guide's definitions, not a run anyone watched. The band split also reads those bounds as
+inclusive, which is the open question in **Trap 1**.
 
 **`Range`.** 300 falls in the 250–499 tier, so 10% comes off all 300 units:
 
@@ -159,32 +157,33 @@ nothing and touches no org.
 
 The script reports four objects as missing from the pack's seed list —
 `AttributeBasedAdjRule`, `AttributeAdjustmentCondition`, `QuoteLinePriceAdjustment` and
-`AssetActionSrcPriceAdjustment`. All four exist in arm-picone; the pack's sweep does not
-describe them. Describe them in the target org before building against them.
+`AssetActionSrcPriceAdjustment`. All four exist where it was possible to check; the pack's
+sweep does not describe them. Describe them in the target org before building against them.
 
 ### 2. Classify the requirement, then create the schedule
 
 One schedule per adjustment policy, not per product. The schedule carries no product link
-at all — not `Product2Id`, not `ProductSellingModelId`. Its scope is `Pricebook2Id`, and
-arm-picone's describe also offers `ContractId`, which the guide does not document.
+at all — not `Product2Id`, not `ProductSellingModelId`. Its scope is `Pricebook2Id`, and a
+v68 describe also offers `ContractId`, which the guide does not document.
 
 Product scoping happens on the child record, which means **one schedule serves many
-products with disjoint tier sets**. arm-picone's single `Volume` schedule carries three
-tiers for one product and three for another (2026-11-25). Name the schedule for the policy.
+products with disjoint tier sets**, and the one org available for checking does exactly
+that: a single `Volume` schedule carrying separate tier sets for two products. Name the
+schedule for the policy.
 
 ### 3. Set `AdjustmentMethod` deliberately
 
 It defaults to `Range`. A schedule left at the default because nobody decided is the most
-expensive unexamined field in this graph. All three arm-picone schedules are `Range`, so
-`Slab` is unexercised there and this skill cannot show you a `Slab` run.
+expensive unexamined field in this graph. Every schedule in the one org available is
+`Range`, so `Slab` is unexercised and this skill cannot show you a `Slab` run.
 
 ### 4. Build the children for that schedule type
 
 **`Volume` and `Term` — tiers.** Per the developer guide: "Tiers can't overlap, and no gaps
 are allowed between tiers." Set `Product2Id` and `ProductSellingModelId` on each tier to scope
-it. `PriceAdjustmentScheduleId` is createable and not updateable in arm-picone, so a tier
-cannot be moved to another schedule — delete and recreate. Settle the bound values against
-**Trap 1** first.
+it. `PriceAdjustmentScheduleId` is createable and not updateable — PLATFORM (v68 describe)
+— so a tier cannot be moved to another schedule: delete and recreate. Settle the bound
+values against **Trap 1** first.
 
 **`Attribute` — a three-record chain.** `AttributeBasedAdjRule` holds the rule;
 `AttributeAdjustmentCondition` holds one condition per attribute, pointing at an
@@ -192,16 +191,16 @@ cannot be moved to another schedule — delete and recreate. Settle the bound va
 attribute's data type; `AttributeBasedAdjustment` ties the rule to the schedule, the
 product and the selling model, and carries the adjustment itself.
 
-One rule per outcome, each with `AttributeCount` 1 — arm-picone's four rules over a single
-picklist attribute are tabulated in `references/adjustment-field-map.md`. A picklist
+One rule per outcome, each with `AttributeCount` 1 — a worked instance over a single
+picklist attribute is tabulated in `references/adjustment-field-map.md`. A picklist
 attribute's value goes in `StringValue`; the wrong typed column leaves the condition inert
 and raises nothing.
 
 **`Bundle` — addressed by path.** `BundleBasedAdjustment` requires three product lookups,
-all create-only in arm-picone: `ProductId` is the component being adjusted,
+all create-only — PLATFORM (v68 describe): `ProductId` is the component being adjusted,
 `ParentProductId` its immediate parent, `RootBundleId` the structural root. The same
-component prices differently under a different root or a different parent. In arm-picone
-all four records set parent equal to root, so nested depth is present in the schema and
+component prices differently under a different root or a different parent. Where it could be
+checked, every record sets parent equal to root, so nested depth is present in the schema and
 unexercised in the data.
 
 ### 5. Set the adjustment type in the right field, in the right spelling
@@ -212,16 +211,16 @@ writing any of these records.
 ### 6. Date the records
 
 `EffectiveFrom` and `EffectiveTo` on the tier let tiers inside one schedule come into
-effect on different dates. arm-picone uses this: three tiers run from 2023-01-01 and three
-from 2026-01-01 under one schedule whose own `EffectiveFrom` is 2023-01-01 (2026-11-25).
-A tier starting later than its schedule is a working configuration.
+effect on different dates, and the one org available for checking uses it: two sets of tiers
+under one schedule, starting three years apart, the later set beginning after the schedule's
+own `EffectiveFrom`. A tier starting later than its schedule is a working configuration.
 
 Two things to get right. `EffectiveFrom` is **required** on `AttributeBasedAdjustment` and
 `BundleBasedAdjustment`, and nillable on the tier and the schedule (both halves of the pack
-agree). And all four fields are `datetime`, not `date`: arm-picone's records carry
-`2023-01-01T00:00:00Z`, `T08:00:00Z` and `T20:00:00Z` across objects that all read as
-"effective 1 January". An adjustment set to start at midnight UTC starts mid-afternoon the
-day before in an org running US Pacific time.
+agree). And all four fields are `datetime`, not `date`. Records that all read as "effective
+1 January" turn out to carry midnight, 08:00 and 20:00 UTC on the same date, so an adjustment
+set to start at midnight UTC starts mid-afternoon the day before in an org running US Pacific
+time.
 
 ### 7. Verify the design before anyone builds it
 
@@ -240,9 +239,9 @@ SELECT COUNT(Id) FROM QuoteLinePriceAdjustment
 SELECT COUNT(Id) FROM OrderItemAdjustmentLineItem
 ```
 
-The second is the test that matters. In arm-picone both return zero, as does
-`AssetActionSrcPriceAdjustment` (2026-11-25): the setup side is fully configured and
-nothing has ever been priced through it. A configuration nobody has run is a hypothesis.
+The second is the test that matters. In the one org available for checking all three return
+zero: the setup side is fully configured and nothing has ever been priced through it. A
+configuration nobody has run is a hypothesis.
 
 ## The four traps
 
@@ -255,13 +254,13 @@ Set this value one digit higher than the quantity you want the tier to include. 
 if a tier's upper bound is 99, set the value of UpperBound to 100." And under Usage: "Tiers
 can't overlap, and no gaps are allowed between tiers."
 
-arm-picone's six active tiers are built as though the bound were inclusive and gaps were
-allowed (observed 2026-11-25):
+Every active tier in the one org available for checking is built as though the bound were
+inclusive and gaps were allowed (read 2026-11-25). Two tier sets, on two products:
 
-| Product | Tiers, `LowerBound`–`UpperBound` |
+| Tier set | `LowerBound`–`UpperBound` |
 |---|---|
-| `01tfn000006KYg8AAG` | 5–10, 11–15, 16–open |
-| `01tfn000006KXZeAAO` | 100–249, 250–499, 500–open |
+| first | 5–10, 11–15, 16–open |
+| second | 100–249, 250–499, 500–open |
 
 Read with an exclusive upper bound, both sets leak at every internal boundary and at the
 floor. The first covers 5–9, 11–14 and 16 up, so **quantities 10 and 15 fall in no tier**,
@@ -297,7 +296,7 @@ same labels — and the other three each differ. On `PriceAdjustmentTier` the fi
 | `OrderItemAdjustmentLineItem` | `AdjustmentType` | `AdjustmentPercentage`, `AdjustmentAmount`, `OverrideAmount` |
 
 Which of `TierType` and `AdjustmentType` governs on the tier is not a judgement call. In
-arm-picone's describe (2026-11-24) `TierType` is required, createable and updateable, while
+a v68 describe `TierType` is required, createable and updateable, while
 `AdjustmentType` is createable=false, updateable=false and calculated=false — you cannot
 write it. The guide agrees from the other direction: it documents `TierType` with its
 values and documents the tier's `AdjustmentType` with **no possible values at all**. All 6
@@ -320,8 +319,8 @@ on the two objects a person defines by hand (`AttributeBasedAdjustment`,
 `PriceAdjustmentTier` carries `ScheduleType`, `SellingModelType`, `PricingTerm` and
 `PricingTermUnit`, which look like denormalised copies of the parent inviting a "which one
 wins if they diverge" question. They cannot diverge by your action: all four are
-createable=false and updateable=false in arm-picone's describe (2026-11-24), and the guide
-lists their properties without `Create` or `Update`.
+createable=false and updateable=false — PLATFORM (v68 describe) — and the guide lists
+their properties without `Create` or `Update`.
 
 Two corrections to the natural reading of that list. Only `ScheduleType` is a field the
 schedule also has. `SellingModelType`, `PricingTerm`, `PricingTermUnit`, `Product2Id` and
@@ -339,9 +338,9 @@ untested — they are not formula fields, so staleness is possible.
 
 On the tier and on both adjustment objects, the `PricingTermUnit` picklist pairs the value
 `Annual` with the label `Years`. Every other value's label equals its value. Both halves of
-the pack agree, so this is product-wide and not an org quirk: arm-picone's describe
-(2026-11-24) shows the pairing, and the guide writes it the same way — "Possible values are
-Annual—Years or Months".
+the pack agree, so this is product-wide and not an org quirk: a v68 describe shows the
+pairing, and the guide writes it the same way — "Possible values are Annual—Years or
+Months".
 
 **Do:** match on the API value `Annual`. A filter, validation rule, flow decision or
 integration mapping written against the label matches nothing. `TierType` has the same
@@ -352,7 +351,7 @@ exactly why Trap 2 is easy to walk into from a screenshot of the UI.
 
 An applied adjustment is recorded on three objects. The quote and the asset agree on the
 cause lookup and **the order is the odd one out**; the line total is spelled differently on
-the quote and the order, and absent from the asset (arm-picone describes, 2026-11-25).
+the quote and the order, and absent from the asset — PLATFORM (v68 describe).
 
 | Concern | `QuoteLinePriceAdjustment` | `OrderItemAdjustmentLineItem` | `AssetActionSrcPriceAdjustment` |
 |---|---|---|---|
@@ -399,14 +398,14 @@ mapping to the reader.
 `OrderItemAdjustmentLineItem` appears on 15 pages of the v68 PDF, every one a polymorphic
 relationship list or the Place Billing Schedule parameter table. `QuoteLinePriceAdjustment`
 appears on one page, in a sample payload posting an `Amount` field the object does not have
-in arm-picone, which has `TotalAmount`. The sample is stale or the API accepts an alias; the
+on that object, which has `TotalAmount`. The sample is stale or the API accepts an alias; the
 pack cannot settle which.
 
 **3. Org fields absent from the guide.** `PriceAdjustmentSchedule.ContractId` and
 `.GlobalKey`; `AttributeBasedAdjustment.ScheduleType` and `.AttributeAdjConditionsHash`;
 `BundleBasedAdjustment.ScheduleType`; `Weekly` in `PricingTermUnit` throughout. `ContractId`
-is the one that matters — it is where contracted pricing would hang off this graph. All three
-arm-picone schedules scope by `Pricebook2Id` and none sets it.
+is the one that matters — it is where contracted pricing would hang off this graph. Every
+schedule in the one org available scopes by `Pricebook2Id` and none sets it.
 
 **4. Two smaller ones.** The guide lists `TierType`'s values twice in one paragraph and the
 first list omits `OverrideAmount`, so a reader who stops at the first sentence concludes
@@ -435,37 +434,39 @@ Every field, with its writability and both sources, is in
   inclusive and is optional on the last tier. (Salesforce Pricing → PriceAdjustmentTier, Usage)
 - **DOCS** — `BillingSchedule.ReferenceEntityItemId` and `InvoiceLine.ReferenceEntityItemId`
   refer to `OrderItem` or `OrderItemAdjustmentLineItem`. (Billing)
-- **ORG arm-picone, 2026-11-24 describe** — on `PriceAdjustmentTier`, `TierType` is required
+- **PLATFORM (v68 describe)** — on `PriceAdjustmentTier`, `TierType` is required
   and writable while `AdjustmentType`, `ScheduleType`, `SellingModelType`, `PricingTerm` and
   `PricingTermUnit` are createable=false and updateable=false; `PriceAdjustmentScheduleId` is
   createable and not updateable; `PricingTermUnit` pairs value `Annual` with label `Years`.
-- **ORG arm-picone, 2026-11-25 SOQL** — 3 schedules (`Volume`, `Attribute`, `Bundle`; each
-  `Range`, active, scoped by one price book); 6 tiers under `Volume` across 2 products; 4
-  `AttributeBasedAdjustment` + 4 rules + 4 conditions; 4 `BundleBasedAdjustment`; **zero**
-  rows in all three landing objects, `ContractItemPrice` and `ContractItemPriceAdjTier`.
-- **ORG arm-picone, 2026-11-25 describe** — the three landing objects share only
+- **ORG** — in the one org available for checking, read 2026-11-25: the setup side is
+  configured on all three exercised schedule types and **zero** rows exist in any of the three
+  landing objects, in `ContractItemPrice` or in `ContractItemPriceAdjTier`. That is what bounds
+  **Not verified** below; the full figures, dated and attributed, are in
+  `notes/price-adjustments.md` in the pack.
+- **PLATFORM (v68 describe)** — the three landing objects share only
   `AdjustmentValue` and `AppliedAdjustmentAmount` by name and rename the cause lookup, line
   total, source and priority as tabulated above.
 
 ## Not verified
 
-- **No adjustment has ever been applied in arm-picone.** Three empty transaction objects,
+- **No adjustment has ever been applied** in the one org available for checking. Three empty
+  transaction objects,
   confirmed by count. Every claim here about what the engine *computes* — Range against Slab
   arithmetic, tier boundary behaviour, which record wins when two match — rests on the guide's
   prose and the object graph, never on a run.
 - **Whether `UpperBound` behaves as exclusive.** Trap 1. The guide says exclusive, the org's
   own tiers are built inclusive, and the org has never priced. This is the gap most likely to
   cost money and I could not close it from the pack.
-- **`Slab`, `Term` and `Custom` are all unexercised.** All three arm-picone schedules are
-  `Range`, and none is `Term` or `Custom`, so the child object for those two types is inferred
-  from the other three rather than observed. A `Term` schedule carrying `PriceAdjustmentTier`
-  is the reasonable reading; confirm before building on it.
+- **`Slab`, `Term` and `Custom` are all unobserved.** Every schedule available for checking
+  is `Range`, and none is `Term` or `Custom`, so the child object for those two types is
+  inferred from the other three rather than observed. A `Term` schedule carrying
+  `PriceAdjustmentTier` is the reasonable reading; confirm before building on it.
 - **Nested bundle depth is unexercised.** All four `BundleBasedAdjustment` rows set
   `ParentProductId` equal to `RootBundleId`, so the schema distinguishes parent from root and
   the data does not exercise it.
-- **Two arm-picone bundle adjustments look like duplicates** — `00000001` and `00000002`
-  share product, parent, root, type, value and `EffectiveFrom`. What the engine does with two
-  matching adjustments is not something the pack answers.
+- **Two bundle adjustments in the one org available look like duplicates**, sharing product,
+  parent, root, type, value and `EffectiveFrom`. What the engine does with two matching
+  adjustments is not something the pack answers.
 - **`UsageType` is null on all four attribute rules and all four conditions.** The guide gives
   `Pricing` and `Rating` as the values and the rule's copy is writable. Set `Pricing` on new
   rules, but these four nulls are the org's only working example, so whether null behaves
@@ -473,9 +474,9 @@ Every field, with its writability and both sources, is in
 - **Whether the read-only projection goes stale.** The four projected tier fields are not
   formula fields. Nothing in the pack says what happens to them when the referenced
   `ProductSellingModel` is edited afterwards.
-- **arm-picone is one dev org, and a sparse one.** The traps are structural, from field
-  metadata and the guide, which travel across orgs; every count, bound and worked value is a
-  single observation from an org seeded by a tool in August 2024.
+- **One org was available for checking, and a sparse one.** The traps are PLATFORM — field
+  metadata and the guide — and travel to any org on the same API version. Every count and
+  bound above is a single observation and travels nowhere.
 
 ## Guardrails
 
@@ -497,7 +498,7 @@ Every field, with its writability and both sources, is in
   rest alone.
 - **Do not express a monthly-against-annual rate difference as a price adjustment.** That is a
   second selling model; see `rc-catalog-selling-models`.
-- **Do not promote arm-picone's configuration to doctrine.** It is a dev org whose adjustment
-  records were autogenerated and never used.
+- **Do not promote one org's configuration to doctrine.** The records behind the observations
+  here were autogenerated and never used.
 - **This skill writes nothing.** No records, no metadata, no org changes. If a task needs a
   write, it belongs in a skill that declares one, with a preview step and a rollback.
