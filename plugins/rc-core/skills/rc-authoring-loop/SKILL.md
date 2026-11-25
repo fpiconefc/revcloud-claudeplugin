@@ -1,6 +1,6 @@
 ---
 name: rc-authoring-loop
-version: '0.1.0'
+version: '0.2.0'
 description: "The authoring discipline for this repository. Read this BEFORE writing, editing or reviewing any rc-* skill, and before adding anything to the knowledge pack's notes/. It defines the loop every skill is written through — scope, ground, draft, verify claim by claim against the pack, record the deltas, review — and the provenance rules that keep a skill from asserting Revenue Cloud facts it cannot support. Use for \"write a new skill\", \"add a skill to rc-build / rc-migrate / rc-labs / rc-accelerate\", \"review this SKILL.md\", \"is this skill ready to commit\", \"how do we write skills here\", \"lint the skills\", \"record what I learned in the pack\", and whenever a contributor or another agent is about to author content for this repo. Not for answering Revenue Cloud questions or building the knowledge pack itself (that is rc-context-pack), and not for configuring an org."
 ---
 
@@ -102,7 +102,9 @@ python3 scripts/lint_skill.py <path-to-skill-dir>
 ```
 
 The linter checks the mechanical things: frontmatter present and well-formed, description
-long enough to trigger reliably and containing trigger phrases, body length, references
+long enough to trigger reliably and containing trigger phrases, description short enough
+for claude.ai to accept (1024 characters — over that it is rejected at upload while
+Claude Code loads it happily, so nothing else catches it), body length, references
 actually referenced from the body, scripts compiling, and unmarked claim-shaped language.
 
 It catches shape, not truth. A skill that lints clean can still be wrong, so the human

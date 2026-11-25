@@ -3,9 +3,9 @@
 
 Checks shape, not truth. A skill that passes can still be wrong; the human review
 in SKILL.md step 6 is what catches that. What this catches is the mechanical
-sloppiness that is tedious to spot by eye: thin descriptions, orphaned reference
-files, scripts that do not compile, and sentences that assert a Revenue Cloud fact
-without saying where it came from.
+sloppiness that is tedious to spot by eye: thin descriptions, descriptions too long
+for claude.ai to accept, orphaned reference files, scripts that do not compile,
+and sentences that assert a Revenue Cloud fact without saying where it came from.
 
 Usage:
     python3 lint_skill.py path/to/skill-dir
@@ -25,6 +25,10 @@ import tempfile
 from pathlib import Path
 
 MIN_DESCRIPTION_CHARS = 200
+# claude.ai rejects a skill whose description exceeds this; Claude Code does not.
+# The limit therefore has to be enforced here, because nothing enforces it until an
+# upload to claude.ai fails. See notes/distribution-channel-limits.md in the pack.
+MAX_DESCRIPTION_CHARS = 1024
 MAX_BODY_LINES = 500
 
 # Phrases that mark a claim as sourced. A claim-shaped sentence near one of these
@@ -51,6 +55,7 @@ CLAIM_SHAPES = [
 
 HEDGES = re.compile(r"\b(may|might|typically|usually|generally|in some cases|often)\b", re.IGNORECASE)
 MAX_HEDGE_RATIO = 0.04  # hedges per line of body
+
 
 
 class Report:
@@ -82,10 +87,19 @@ def split_frontmatter(text: str) -> tuple[str | None, str]:
 
 
 def scalar(frontmatter: str, key: str) -> str | None:
+    """Return a frontmatter scalar as YAML would parse it.
+
+    Lengths are compared against a platform limit, so a double-quoted scalar is
+    unescaped: a description written with \\" in the file is one character there,
+    not two, and that is the length claude.ai counts.
+    """
     m = re.search(rf"^{key}:\s*(.+?)(?=\n\S|\n*$)", frontmatter, re.S | re.M)
     if not m:
         return None
-    return m.group(1).strip().strip("'\"")
+    raw = m.group(1).strip()
+    if len(raw) >= 2 and raw[0] == raw[-1] == '"':
+        return raw[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+    return raw.strip("'")
 
 
 def lint(skill_dir: Path) -> Report:
@@ -121,6 +135,14 @@ def lint(skill_dir: Path) -> Report:
             rep.error(
                 f"description is {len(description)} chars; under {MIN_DESCRIPTION_CHARS} "
                 "it under-triggers. Add the phrasings a user would type."
+            )
+        if len(description) > MAX_DESCRIPTION_CHARS:
+            rep.error(
+                f"description is {len(description)} chars; claude.ai rejects any skill "
+                f"over {MAX_DESCRIPTION_CHARS} and will not publish it to the "
+                "organisation. Claude Code accepts it, so this fails only at upload "
+                f"time. Cut {len(description) - MAX_DESCRIPTION_CHARS} chars from the "
+                "prose, never from the quoted trigger phrases or the 'not for' clause."
             )
         if '"' not in description and "'" not in description:
             rep.warn("description quotes no trigger phrases; skills under-trigger without them")

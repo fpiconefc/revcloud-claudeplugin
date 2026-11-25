@@ -44,6 +44,14 @@ monthly and annual thing" and "why isn't the invoice splitting". Put those in.
 **State what it is not for.** With several neighbouring skills, the boundary is what stops
 the wrong one loading. Name the neighbour.
 
+**Stay under 1024 characters.** This is a hard limit on claude.ai: a skill whose
+description is longer is rejected at upload and never reaches the organisation. Claude
+Code loads the same skill without complaint, so the overflow is invisible until the day
+you try to distribute. Measure the YAML-parsed value — an escaped `\"` in the file is one
+character, not two — and count it before you commit; `lint_skill.py` fails the build on
+it. When you have to cut, cut prose: the quoted trigger phrases and the "not for" clause
+are what the description is for. See `notes/distribution-channel-limits.md` in the pack.
+
 Do not put "when to use" guidance in the body. The body is only read after the skill has
 already triggered, so it is too late to matter there.
 
