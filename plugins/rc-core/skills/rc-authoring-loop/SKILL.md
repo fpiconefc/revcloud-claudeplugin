@@ -37,9 +37,9 @@ Decide and record two properties now, because they change everything downstream:
 - **Reads or writes.** A skill that writes to an org carries different obligations. See
   **Skills that write** below; this is the one property that changes what the linter
   requires of you.
-- **Which pack half it depends on.** A skill resting on ORG facts cannot be verified
-  without a fingerprint of a comparable org. If you don't have one, say so in the skill
-  rather than guessing.
+- **Which sources it rests on.** A skill built on field metadata needs a describe to verify
+  against, at a stated API version. A skill built on how one org is loaded is not doctrine
+  and should not be a skill. See `references/provenance.md`.
 
 #### Skills that write
 
@@ -89,11 +89,30 @@ and interleaving them produces a hedged, unreadable skill.
 ### 4. Verify, claim by claim
 
 Go back through the draft and mark every factual claim about Revenue Cloud. For each one,
-resolve it to **DOCS**, **ORG**, or **neither**.
+resolve it to **DOCS**, **PLATFORM**, **ORG**, or **neither**.
 
-`references/provenance.md` defines what counts as a claim and how to mark it. The short
-version: object names, field names, picklist values, API versions, behaviour, and limits
-are claims. Design advice and procedure are not.
+`references/provenance.md` defines what counts as a claim, the three sources and how to mark
+them. The short version: object names, field names, picklist values, writability, API
+versions, behaviour and limits are claims; design advice, procedure and arithmetic performed
+from a definition are not.
+
+The three sources differ by how far they travel, and getting this wrong is what makes a skill
+read as doctrine when it is somebody's configuration:
+
+- **DOCS** — the v68 guide. Best practice and intended behaviour. This is what structures the
+  body of a skill.
+- **PLATFORM** — field metadata verified by describe: writability, picklist values and
+  labels, required, defaults. It comes from the managed package, so it is the same in any org
+  on the same API version. **It carries that version and never names an org.**
+- **ORG** — counts, distributions, how one org is loaded. It structures nothing. In a
+  `SKILL.md` it is legitimate for exactly two things: showing where the guide and reality
+  disagree, and declaring what could not be verified. Everything else goes to `notes/`.
+
+**No `SKILL.md` names an org** — not in a table, a header, an anchor, an example or a
+footnote, and the linter fails the build on it. The rule follows from the categories: a
+PLATFORM claim does not need the org because the metadata is the same everywhere, and an ORG
+claim does not belong in the body. A sentence that needs the org's name to stand up is
+telling you it is not doctrine.
 
 A claim that resolves to neither has three honest endings, and only three:
 
@@ -170,16 +189,18 @@ far to trust the example.
 Verification will turn up disagreements between the guide and the org. Those are the most
 valuable output of the whole loop, and they are lost unless written down immediately.
 
-For a customer-facing fact, **ORG wins**. For what the product supports in general,
-**DOCS wins**. Never average them, and never quietly pick one.
+For what the product supports in general, **DOCS wins**. For whether a field is writable,
+required or read-only and what a picklist holds, **PLATFORM wins** — the describe is the
+org's own answer and the guide is frequently behind it. Never average them, and never quietly
+pick one.
 
 Write each delta to `~/.claude/knowledge/revenue-cloud/notes/` with: what the guide says,
 what the org shows, which org and when, and what a reader should do about it. One file per
 topic, appended to over time. `references/notes-protocol.md` has the format and the rules
 about what does *not* belong there.
 
-The discipline that matters most: an observation from a development or demo org is **not
-doctrine**. Dev orgs carry leftovers from experiments. Mark such observations as
+The discipline that matters most: an ORG observation from a development or demo org is **not
+doctrine**, and belongs in `notes/` rather than in a skill. Dev orgs carry leftovers from experiments. Mark such observations as
 unvalidated until a customer org confirms them. A plausible pattern promoted to doctrine
 from one dev org is worse than no note at all, because it reads as verified.
 
@@ -199,7 +220,9 @@ actually referenced from the body, scripts compiling, and unmarked claim-shaped 
 It catches shape, not truth. A skill that lints clean can still be wrong, so the human
 review below is not optional:
 
-- Does every Revenue Cloud fact carry DOCS or ORG?
+- Does every Revenue Cloud fact carry DOCS, PLATFORM or ORG, and every PLATFORM claim an
+  API version?
+- Does the skill name an org anywhere? It must not.
 - Has every quantifier been counted against the table or describe below it?
 - Is the skill free of catalog data — product names, SKUs, prices, attribute names and values?
 - If it writes: can every record it creates be found again and removed, and does the body say how?
