@@ -1,0 +1,63 @@
+# rc-org-writer spec. Declares what must exist in an org; it is the single input
+# to preview, apply, verify and teardown.
+#
+# Constrained YAML subset: mappings, one nested level, a list of mappings under
+# `records`, scalars, and `>` for the purpose block. No anchors, no aliases, no
+# flow style. validate_spec.py errors on anything else rather than guessing.
+
+spec: rc-org-writer/v1
+
+target:
+  org: arm-picone
+  modules: salesforce_pricing
+
+author: <who is accountable for this run>
+created: '2026-11-25'
+
+purpose: >
+  One or two sentences on why these records should exist and what a reader is
+  meant to learn from them. A spec with no stated purpose cannot be reviewed,
+  because nobody can tell whether it did what it was for.
+
+marker:
+  # Every record this spec creates carries this token, so a later teardown can
+  # prove authorship without trusting the log alone. Pick something no catalog
+  # value would collide with: a reserved prefix, the date, and a short suffix.
+  token: RCW-20261125-A
+
+records:
+
+  # Tier 1 -- the object has a unique, idLookup field. Declare it as `key` and
+  # apply upserts on it, which makes a second run a no-op rather than a duplicate.
+  - alias: sched
+    object: PriceAdjustmentSchedule
+    key: GlobalKey
+    fields:
+      Name: RCW-20261125-A volume policy
+      GlobalKey: RCW-20261125-A-sched
+      ScheduleType: Volume
+      AdjustmentMethod: Range
+      IsActive: true
+
+  # Tier 3 -- the object's Name is autonumbered, so no marker fits on the record.
+  # `marked_by` names a record in this spec that can carry one, and whose lookup
+  # from here is required and create-only. Authorship is then inherited and
+  # cannot be reassigned.
+  - alias: tier_low
+    object: PriceAdjustmentTier
+    marked_by: sched
+    fields:
+      PriceAdjustmentScheduleId: '@sched'
+      LowerBound: 100
+      UpperBound: 250
+      TierType: AdjustmentPercentage
+      TierValue: 5
+
+  - alias: tier_high
+    object: PriceAdjustmentTier
+    marked_by: sched
+    fields:
+      PriceAdjustmentScheduleId: '@sched'
+      LowerBound: 250
+      TierType: AdjustmentPercentage
+      TierValue: 10
