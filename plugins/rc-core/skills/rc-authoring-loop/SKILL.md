@@ -94,6 +94,29 @@ Prefer the counted form. "Two of the three share it and the order is the odd one
 true and more useful to a reader than "all three differ", because it is what they can keep in
 their head.
 
+**What the linter's version of this does not catch**, with the case that proved it. The check
+fires on quantifier words near a table. It does **not** fire on a bare cardinal asserting a
+total over an enumeration, and rc-bundles shipped "the two read-only role picklists ... carry
+18 values between them" above a six-row table. The real figure is nine values over four
+fields: 18 counted the same nine twice, once on the component and once on the relationship
+type. The table under it was also missing three of the nine, so neither the number nor the
+enumeration was right, and nothing complained.
+
+Extending the check to compare a cardinal against the row count of a table in the same
+section was tried and rejected: across the repo it produced seven findings and all seven were
+false, because prose near a table almost always counts a different dimension than the table's
+rows — the objects in its columns, the sections above it, an org-wide total. A check that is
+wrong every time trains people to ignore the linter, which costs more than the miss. So this
+one stays manual, and the rule is:
+
+> A number that totals an enumeration is verified against the enumeration, written out in
+> full, in the same place. If the list is too long to write out, the number is a claim about
+> a describe and is cited as one.
+
+Watch particularly for a total that spans **two fields holding the same vocabulary**. A
+picklist projected onto another object does not double the vocabulary, and counting both
+copies is the easiest way to produce a confident wrong number.
+
 #### No catalog data in a SKILL.md
 
 A skill carries no catalog content from any org: no product names, no SKUs or product

@@ -251,6 +251,13 @@ relationship type.
 And on `ProductRelationshipType` both role fields are **create-only**: createable true,
 updateable false. A relationship type's pattern is fixed once the record exists.
 
+One asymmetry inside that pair will catch a load. **`MainProductRoleCat` is required and
+`AssociatedProductRoleCat` is nillable** (arm-picone describe, 2026-11-25). On an object whose
+entire purpose is the role pair, half of it is optional: a relationship type can declare what
+the parent is and say nothing about the child. The guide documents the nillable half and not
+the required one, which is delta 3 below, so the half you are obliged to populate is the half
+with no DOCS description.
+
 **Do:** choose the pattern by choosing or creating a `ProductRelationshipType`, and treat its
 role categories as unchangeable afterwards. To move components to another pattern, point them
 at a different type. Neither `ParentProductRole` nor `ChildProductRole` appears anywhere in
@@ -258,21 +265,27 @@ the v68 guide, so the describe is the only source for either.
 
 ### Trap 2 — every role value differs from its label
 
-The two read-only role picklists on the component and the two create-only ones on the
-relationship type carry 18 values between them. Not a single label equals its value. ORG
-arm-picone, 2026-11-25:
+The role vocabulary is **nine values**, carried on **four fields** — the parent role and the
+child role, each appearing once on the component as a read-only projection and once on the
+relationship type as the create-only original. Four parent values, five child values, and not
+one of the nine equals its label. ORG arm-picone, 2026-11-25:
 
-| Value | Label |
-|---|---|
-| `Bundle` | Bundle **Parent** |
-| `Set` | Set **Parent** |
-| `AddOn` | **Addon** Parent |
-| `BundleComponent` | Bundle Component |
-| `AddOnComponent` | **Addon** Component |
-| `ClassificationComponent` | **Product** Classification Component |
+| Field pair | Value | Label |
+|---|---|---|
+| `ParentProductRole` / `MainProductRoleCat` | `Bundle` | Bundle **Parent** |
+| | `Set` | Set **Parent** |
+| | `AddOn` | **Addon** Parent |
+| | `ProductRequest` | Product Request |
+| `ChildProductRole` / `AssociatedProductRoleCat` | `BundleComponent` | Bundle Component |
+| | `SetComponent` | Set Component |
+| | `AddOnComponent` | **Addon** Component |
+| | `ClassificationComponent` | **Product** Classification Component |
+| | `ProductRequestComponent` | Product Request Component |
 
-Note `AddOn` → "Addon", a capitalisation change inside the word, and
-`ClassificationComponent`, whose label gains a word the value does not have.
+Three distinct ways to differ, which is why not one of the nine survives a label match: a
+space inserted at every word boundary, a capitalisation change inside a word (`AddOn`
+becoming "Addon"), and a label that gains a word the value does not have
+(`ClassificationComponent`).
 
 `QuoteVisibility` inverts the problem: its values contain spaces — `Transaction Line Editor
 Only` and `Quote Document Only` are API values, not labels.
@@ -420,7 +433,8 @@ Field-by-field detail is in `references/component-field-map.md`. The load-bearin
   and updateable false; `ParentProductId`, `ChildProductId`, `ChildProductClassificationId`
   and `ParentSellingModelId` are create-only; `ProductRelationshipTypeId` is required;
   `DoesBundlePriceIncludeChild` is required with no default. On `ProductRelationshipType`
-  both role categories are create-only.
+  both role categories are create-only, `MainProductRoleCat` is required with 4 values and
+  `AssociatedProductRoleCat` is nillable with 5 — nine role values over four fields in all.
 - **ORG arm-picone, 2026-11-25 SOQL** — 272 component rows over 240 distinct child products
   and 120 groups; 272 of 272 are Bundle → BundleComponent; `IsComponentRequired` true on 3;
   `QuantityScaleMethod` Proportional 178, null 93, Constant 1; 7 groups carry a
