@@ -1,0 +1,39 @@
+#!/bin/sh
+# Lint every rc-* skill before a commit lands.
+#
+# Same invocation as the "Skills lint clean" step in .github/workflows/ci.yml, so a
+# commit that passes here passes there. No --strict: errors block the commit,
+# warnings are printed and ignored.
+#
+# The error this exists for is a SKILL.md description over 1024 characters. claude.ai
+# rejects such a skill at upload; Claude Code loads it without complaint. Nothing
+# reports it on the authoring machine, so without this hook it is found by whoever
+# tries to distribute to the organisation.
+#
+# Activate once per clone (git does not version .git/hooks):
+#     git config core.hooksPath scripts/hooks
+# Bypass for one commit:
+#     git commit --no-verify
+#
+# Note it lints the working tree, not the staged index. With unstaged edits in flight
+# the verdict is about the files on disk, which is what you are about to keep working
+# on anyway.
+
+set -e
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+linter="plugins/rc-core/skills/rc-authoring-loop/scripts/lint_skill.py"
+
+if [ ! -f "$linter" ]; then
+    echo "pre-commit: $linter is missing; skipping skill lint" >&2
+    exit 0
+fi
+
+if ! python3 "$linter" plugins/*/skills/*; then
+    echo >&2
+    echo "pre-commit: skill lint failed. Fix the errors above, or commit with" >&2
+    echo "            --no-verify if you know what you are doing." >&2
+    exit 1
+fi

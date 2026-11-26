@@ -60,3 +60,12 @@ jobs:
           for f in plugins/*/skills/*/scripts/*.py; do
             python3 -m py_compile "$f" && echo "ok $f"
           done
+
+      # No --strict: an error fails the build, a warning is advisory. The errors
+      # that matter here are the ones nothing else catches, above all a
+      # description over 1024 characters, which claude.ai rejects at upload while
+      # Claude Code loads it without complaint.
+      - name: Skills lint clean
+        run: |
+          python3 plugins/rc-core/skills/rc-authoring-loop/scripts/lint_skill.py \
+            plugins/*/skills/*

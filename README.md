@@ -65,4 +65,22 @@ an org. Writing belongs to skills that say so in their frontmatter.
 python3 -c "import json;json.load(open('.claude-plugin/marketplace.json'))"
 for f in plugins/*/.claude-plugin/plugin.json; do python3 -c "import json,sys;json.load(open(sys.argv[1]))" "$f"; done
 for f in plugins/*/skills/*/scripts/*.py; do python3 -m py_compile "$f"; done
+python3 plugins/rc-core/skills/rc-authoring-loop/scripts/lint_skill.py plugins/*/skills/*
 ```
+
+The last line is the skill linter, and CI runs the same invocation. Errors fail the
+build, warnings do not. Add `--strict` to fail on warnings too.
+
+### Pre-commit hook
+
+Git does not version `.git/hooks`, so the hook lives at `scripts/hooks/pre-commit` and
+has to be activated once per clone:
+
+```bash
+git config core.hooksPath scripts/hooks
+```
+
+It runs the linter above and blocks a commit on any error; `git commit --no-verify`
+bypasses it. The error worth having it for is a `SKILL.md` description over 1024
+characters: claude.ai rejects such a skill at upload while Claude Code loads it without
+complaint, so nothing on the authoring machine reports it.
