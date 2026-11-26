@@ -273,8 +273,9 @@ listed so a human can finish the job.
 
 ### The four scripts
 
-One per phase, plus the plumbing they share. No third-party dependencies; `sf` is a
-subprocess and `--json` is how Ids are captured.
+One per phase. No third-party dependencies; `sf` is a subprocess and `--json` is how Ids are
+captured. `_orgio.py` holds what apply, verify and teardown share — the `sf` calls, the log,
+`@alias` resolution, the datetime comparison — and is not run directly.
 
 | Script | Phase | Touches the org |
 |---|---|---|
@@ -282,9 +283,6 @@ subprocess and `--json` is how Ids are captured.
 | `apply.py` | apply | writes, and only with `--confirm` |
 | `verify.py` | verify | read-only |
 | `teardown.py` | teardown | deletes, and only with `--confirm` |
-
-`_orgio.py` holds what apply, verify and teardown share: the `sf` calls, the log,
-`@alias` resolution and the datetime comparison. It is not run directly.
 
 ## A validator that reads metadata cannot be complete
 
@@ -303,11 +301,10 @@ selling model it names is rejected, and that precondition lives on
 each individually valid can be jointly invalid**, and nothing in the spec is wrong when they
 are.
 
-So: **preview against the org is not a luxury**, since it is the only phase that can find
-rules like these, and it finds them by asking rather than by reasoning about metadata. **A
-clean preview still does not promise apply will succeed** — apply surfaces the platform's
-message verbatim, because that message is the documentation for a rule that has none. And **a
-failed create is evidence**: record the sentence in `notes/`.
+So **preview against the org is not a luxury** — it is the only phase that finds rules like
+these, by asking rather than reasoning about metadata — and **a clean preview still does not
+promise apply will succeed**. Apply surfaces the platform's message verbatim, because that
+sentence is the documentation for a rule that has none. Record it in `notes/`.
 
 ## Marking — how a record is known to be ours
 
@@ -351,9 +348,13 @@ These are half the value of this skill. Each one is a rule the cycle enforces, n
   written, and recorded in the log only as `kind: lookup`, which teardown skips.
 - **A lookup resolves to exactly one record or the preview fails.** Zero matches and two
   matches are both errors, and neither is negotiable at apply time.
-- **Applying twice must not duplicate.** Tier 1 upserts on its key and is exactly once. Tier 2
-  is query-then-skip, which is adequate for one operator and **is not safe against two
-  concurrent runs** — say so rather than implying stronger.
+- **Applying twice cannot duplicate, by refusing rather than upserting.** `apply.py` inserts.
+  A second run is caught by preview's existence check, and if preview is skipped the unique
+  index refuses the insert. It is **not** a no-op: it stops with an error and writes no
+  `created` row (observed 2026-11-26).
+- **A true upsert is deliberately absent**, because its update branch would modify a record
+  a different run created, which the ownership rule forbids. See
+  `references/marking-and-idempotency.md`.
 - **Some objects are stronger than their marking tier suggests, within a narrow scope.**
   `PriceAdjustmentTier` is tier 3 and has no marker, yet the platform refuses a tier whose
   range overlaps another under the same schedule: *"The tiers must have unique effective date
@@ -458,8 +459,8 @@ Per-object detail, with the counts behind the tier table, in
   validation rule. See **Not verified** for what that does and does not prove.
 - **PLATFORM (v68, observed)** — `PriceAdjustmentTier` is tier 3 as its metadata says: its
   `Name` is `autoNumber: true, createable: false`, and a created record came back numbered.
-- **PLATFORM (v68, observed)** — teardown in reverse creation order succeeds and leaves the
-  org as it was, with referenced records untouched throughout.
+- **PLATFORM (v68, observed)** — teardown in reverse order succeeds, leaving the org as it
+  was with referenced records untouched.
 - **PLATFORM (v68, observed)** — `PriceAdjustmentTier.EffectiveFrom` is `nillable: true` in
   the describe and rejected when absent: *"Specify the Effective From date to save your price
   adjustment tier."*
@@ -475,9 +476,9 @@ Per-object detail, with the counts behind the tier table, in
   so it is unvalidated under the pack's notes protocol. The scripts here were written from it
   and have not themselves been run end to end.
 - **Upsert-on-key is still unproven.** The run showed that a *duplicate insert* on `GlobalKey`
-  is refused by the platform's index. That is a different claim from an upsert being exactly
-  once, which was never executed. Prove it with a two-record spec applied twice before relying
-  on it.
+  is refused by the platform's index, naming the colliding record. Re-running the same spec
+  on 2026-11-26 stopped with `DUPLICATE_VALUE` and created nothing — no duplicate, and no
+  no-op either; the guardrails say why upsert is not the answer.
 - **Autonumbered names do not reset when records are deleted.** A failed or torn-down apply
   leaves gaps in sequences like `PAT-00000000nn`, and teardown does not and cannot reclaim
   them. Harmless, but it means the org is not byte-identical after a teardown even when it is
@@ -492,9 +493,8 @@ Per-object detail, with the counts behind the tier table, in
   expected-difference list is still assembled from field metadata rather than from a verify
   pass that produced it, so treat the list as a starting point and add to it as runs reveal
   more.
-- **The 17/22/70 split counts the objects this pack seeds**, four of them on custom fields
-  local to one org. Another org splits differently, which is why the validator reads the
-  target org's own describes rather than this table.
+- **The 17/22/70 split counts the objects this pack seeds**, four on org-local custom fields.
+  Another org splits differently, which is why the validator reads the target org's describes.
 
 ## For a build skill that uses this one
 

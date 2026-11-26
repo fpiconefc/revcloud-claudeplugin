@@ -46,9 +46,16 @@ def _run(args: list[str]) -> dict:
     if not out:
         raise OrgError(proc.stderr.strip() or f"no output from {' '.join(args[:4])}")
     try:
-        return json.loads(out)
+        payload = json.loads(out)
     except json.JSONDecodeError:
         raise OrgError(f"non-JSON reply: {out[:300]}")
+    # A failure from the CLI is still valid JSON. Treating "it parsed" as "it
+    # worked" is how a teardown reports deletions that never happened.
+    if isinstance(payload, dict):
+        status = payload.get("status")
+        if (status not in (0, None)) or payload.get("name") == "SfError":
+            raise OrgError(_message(payload))
+    return payload
 
 
 def _errors(node) -> list[str]:
@@ -133,19 +140,35 @@ def create(org: str, version: str, obj: str, fields: dict) -> str:
 
 
 def delete(org: str, version: str, obj: str, record_id: str) -> str:
-    """Delete one record. Returns 'deleted' or 'already gone'."""
+    """Delete one record. Returns 'deleted' or 'already gone'.
+
+    Uses `sf data delete record` rather than a REST DELETE: the REST subcommand
+    refuses a request with no body mode, and its refusal is valid JSON, so an
+    earlier version reported deletions that never reached the org.
+
+    Success is confirmed from the reply, never assumed.
+    """
     try:
-        _run([
-            "sf", "api", "request", "rest",
-            f"/services/data/v{version}/sobjects/{obj}/{record_id}",
-            "--method", "DELETE", "--target-org", org, "--json",
+        payload = _run([
+            "sf", "data", "delete", "record",
+            "--sobject", obj, "--record-id", record_id,
+            "--target-org", org, "--json",
         ])
-        return "deleted"
     except OrgError as exc:
-        text = str(exc).upper()
-        if "NOT_FOUND" in text or "ENTITY_IS_DELETED" in text or "404" in text:
+        # Normalise so "ENTITY_IS_DELETED" and "entity is deleted" both match:
+        # the platform uses both spellings for the same condition.
+        text = str(exc).upper().replace("_", " ")
+        if any(token in text for token in
+               ("NOT FOUND", "ENTITY IS DELETED", "INVALID CROSS REFERENCE KEY",
+                "ALREADY BEEN DELETED", "404")):
             return "already gone"
         raise
+    result = payload.get("result")
+    if isinstance(result, list) and result:
+        result = result[0]
+    if isinstance(result, dict) and result.get("success") is True:
+        return "deleted"
+    raise OrgError(f"delete of {obj} {record_id} was not confirmed: {_message(payload)}")
 
 
 # ------------------------------------------------------------------- log ---

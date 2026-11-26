@@ -45,9 +45,10 @@ them against the schema the connector returns. Never invent a field name to fill
 
 ## The expensive one, up front
 
-The costliest mistake here is not a field name, it is a tier boundary: the guide documents
-`UpperBound` as exclusive and the one org in the pack is built as though it were inclusive.
-**Trap 1** is that, it leads the trap list for this reason, and it is unresolved.
+The costliest mistake here is not a field name, it is a tier boundary. The guide documents
+`UpperBound` as exclusive and **the platform treats it as inclusive**, so following the guide
+literally produces tiers it refuses to create. **Trap 1** is that, and it leads the trap list
+for the same reason.
 
 ## Routing — what varies decides `ScheduleType`
 
@@ -103,8 +104,8 @@ bands and prices each band at its own rate.
 
 Take an illustrative three-tier schedule — 100–249 at 5%, 250–499 at 10%, 500 and up at
 15% — and price 300 units at a $100 list price. What follows is arithmetic performed from
-the guide's definitions, not a run anyone watched. The band split also reads those bounds as
-inclusive, which is the open question in **Trap 1**.
+the guide's definitions, not a run anyone watched. The band split reads those bounds as
+inclusive, which **Trap 1** confirms is how the platform treats them.
 
 **`Range`.** 300 falls in the 250–499 tier, so 10% comes off all 300 units:
 
@@ -247,38 +248,36 @@ configuration nobody has run is a hypothesis.
 
 Full field inventory with writability in `references/adjustment-field-map.md`.
 
-### Trap 1 — `UpperBound` is documented exclusive, and the org contradicts it
+### Trap 1 — `UpperBound` is inclusive, and the guide says the opposite
 
-The guide is explicit twice. On `UpperBound`: "Must be a positive integer. Not inclusive.
-Set this value one digit higher than the quantity you want the tier to include. For example,
-if a tier's upper bound is 99, set the value of UpperBound to 100." And under Usage: "Tiers
-can't overlap, and no gaps are allowed between tiers."
+The guide is explicit twice, and wrong both times. On `UpperBound`: *"Must be a positive
+integer. Not inclusive. Set this value one digit higher than the quantity you want the tier
+to include. For example, if a tier's upper bound is 99, set the value of UpperBound to 100."*
+And under Usage: *"Tiers can't overlap, and no gaps are allowed between tiers."*
 
-Every active tier in the one org available for checking is built as though the bound were
-inclusive and gaps were allowed (read 2026-11-25). Two tier sets, on two products:
+**The bound is inclusive at both ends.** PLATFORM (v68, observed 2026-11-26): with a tier at
+100–250 already in place, creating a second at **250**–500 is refused:
 
-| Tier set | `LowerBound`–`UpperBound` |
-|---|---|
-| first | 5–10, 11–15, 16–open |
-| second | 100–249, 250–499, 500–open |
+> The tiers must have unique effective date ranges and lower and upper bound value ranges.
 
-Read with an exclusive upper bound, both sets leak at every internal boundary and at the
-floor. The first covers 5–9, 11–14 and 16 up, so **quantities 10 and 15 fall in no tier**,
-and 1–4 is uncovered. The second covers 100–248, 250–498 and 500 up, so **249 and 499 fall in
-no tier**, and 1–99 is uncovered. Four holes punched mid-schedule plus two uncovered floors:
-one hole at each of the four internal boundaries these tiers have, with not one boundary
-clean.
+A shared boundary value is an overlap, so 250 belongs to the first tier. Written as 251–500
+the same tier is accepted. The question was settled **at write time**, not by pricing
+anything: the platform's own validation answers it, which is why this moved out of
+**Not verified**.
 
-Read as inclusive, both sets run contiguous from their floor up and nothing leaks. The
-density is the argument — a single bad boundary reads as a typo, but a configuration wrong at
-every boundary and right at none was built by someone reading the bound as inclusive. Both
-schedules are active.
+Follow the guide literally and you get tiers the platform refuses: its instruction produces
+bands written 1–100, 100–200, 200–300, each sharing a bound with the next.
 
-**Do:** do not settle this by reading, including by reading this skill. Price one
-transaction at each boundary quantity in a sandbox and read the adjustment that comes back.
-Until then treat a tier boundary as the highest-risk number in the configuration: an
-off-by-one here misprices exactly one quantity per band, produces a plausible invoice, and
-no validation catches it.
+**Do:** write consecutive tiers as `n` to `m`, then `m+1` onward. That is gapless for whole
+quantities.
+
+**One question this leaves open, and it matters for anything sold in fractions.** Because a
+shared bound is rejected, consecutive tiers must step by one. For integer quantities that is
+gapless. For a product sold in fractional units, a quantity of 250.5 falls in neither 100–250
+nor 251–500, **and the gap cannot be closed**, because the only configuration that would
+cover it is the one the platform refuses. What the engine does with such a quantity is
+unknown and is recorded as an open question in `notes/price-adjustments.md`. If a product is
+fractionally quantified, establish this before designing tiers on it.
 
 ### Trap 2 — `AdjustmentType` is three different fields wearing one name
 
@@ -454,9 +453,10 @@ Every field, with its writability and both sources, is in
   confirmed by count. Every claim here about what the engine *computes* — Range against Slab
   arithmetic, tier boundary behaviour, which record wins when two match — rests on the guide's
   prose and the object graph, never on a run.
-- **Whether `UpperBound` behaves as exclusive.** Trap 1. The guide says exclusive, the org's
-  own tiers are built inclusive, and the org has never priced. This is the gap most likely to
-  cost money and I could not close it from the pack.
+- **What the engine does with a fractional quantity that falls between tiers.** Trap 1
+  settled that bounds are inclusive and that consecutive tiers must step by one, which is
+  gapless for whole quantities and not for fractional ones. The uncoverable gap is real; what
+  happens to a quantity inside it was not tested.
 - **`Slab`, `Term` and `Custom` are all unobserved.** Every schedule available for checking
   is `Range`, and none is `Term` or `Custom`, so the child object for those two types is
   inferred from the other three rather than observed. A `Term` schedule carrying
@@ -485,8 +485,9 @@ Every field, with its writability and both sources, is in
 - **Never write `AdjustmentType` on a `PriceAdjustmentTier`.** Set `TierType`. Check the
   spelling against Trap 2's table every time; the two value sets look interchangeable and are
   not.
-- **Never trust a tier boundary you have not priced.** Trap 1 is unresolved, and it is the
-  one that produces a wrong invoice rather than an error.
+- **Never write consecutive tiers that share a bound.** They are an overlap, the platform
+  rejects them, and the guide's own instruction tells you to write exactly that. Step by one:
+  `n` to `m`, then `m+1`.
 - **Never carry `AdjustmentMethod` across from CPQ on the strength of the shared word.**
   Re-derive it from prices the customer has actually been invoiced.
 - **Three fields break a quote-to-order adjustment mapping, and only three.** The cause

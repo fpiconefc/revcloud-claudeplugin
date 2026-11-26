@@ -161,6 +161,28 @@ structural: the delete list is the log, and they are not in it.
 Fields usable in a `where` clause must be filterable; the validator checks that against the
 describe and rejects a clause naming a field the object does not have.
 
+## Why there is no upsert
+
+Tier 1 objects carry a unique, idLookup key, and Salesforce offers an upsert against exactly
+that kind of field. The cycle does not use it, for a reason worth stating rather than
+leaving as an omission.
+
+**An upsert that finds an existing record updates it.** That record was created by some
+earlier run, or by a person, and the ownership rule {D} never modify or delete a record this
+run did not create {D} has no exception for "but it matches my key". Upsert and that rule
+cannot both hold. The cycle keeps the rule.
+
+What replaces it is weaker and honest. `apply.py` inserts. A second run against the same spec
+is caught by preview's existence query, and if preview is skipped the platform's unique index
+refuses the insert:
+
+> duplicate value found: GlobalKey duplicates value on record with id: ...
+
+Observed 2026-11-26 by re-running a spec whose schedule already existed: apply stopped there
+and created nothing. So **a second run cannot duplicate, and it is an error rather than a
+no-op.** A caller wanting re-runnable behaviour tears down and re-applies, which is the same
+answer the cycle gives for correction.
+
 ## Create-only fields make correction a delete
 
 A field that is createable and not updateable cannot be fixed in place. Known cases, all
