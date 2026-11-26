@@ -30,31 +30,25 @@ This is not a formality here. The spec validator reads the target org's describe
 out how each record can be marked and whether a field is writable at all. Against an org
 with no fingerprint it degrades to checking syntax, and says so.
 
-## Scope, and the line that matters most
+## Scope, the target, and the line that matters most
 
 This skill creates **configuration** by DML: schedules, tiers, groups, components,
 relationship types, selling models. That is its whole job.
 
 **It does not run transactions.** Place Sales Transaction, placing a quote, reading which
-adjustment landed on `QuoteLinePriceAdjustment` or `OrderItemAdjustmentLineItem` — none of
-that is here. Those belong to a testing skill that does not exist yet, and when it does it
-will depend on this one for the configuration it exercises. Until then, a spec builds the
-setup side and a human drives the transaction.
-
-The distinction is not pedantry. Configuration DML is reversible by deleting records.
-A transaction creates assets, billing schedules and order items whose removal is a different
-problem entirely, and nothing in this contract covers it.
-
-## The target, and what the real risk is
+adjustment landed on `QuoteLinePriceAdjustment` — none of that is here. Those belong to a
+testing skill that does not exist yet and will depend on this one for the configuration it
+exercises. The distinction is not pedantry: configuration DML is reversible by deleting
+records, while a transaction creates assets and billing schedules whose removal is a
+different problem this contract does not cover.
 
 The working target is a **demo org** with catalogs, selling models, components and billing
-schedules loaded and in use. The risk there is not breaking production. It is
-**dirtying or overwriting demo material** — leaving half-built records in a catalog someone
-is about to present, or editing a record that was already doing a job.
-
-That is why teardown is not an extra. Teardown is what turns a demo org into a repeatable
-test bench: a spec that applies and tears down cleanly can be run on a Monday and again on a
-Friday, and the org is the same org afterwards.
+schedules loaded and in use. The risk there is not breaking production; it is **dirtying or
+overwriting demo material** — leaving half-built records in a catalog someone is about to
+present, or editing a record that was already doing a job. That is why teardown is not an
+extra. Teardown is what turns a demo org into a repeatable test bench: a spec that applies
+and tears down cleanly can run on a Monday and again on a Friday, and the org is the same
+org afterwards.
 
 ## The spec
 
@@ -91,17 +85,13 @@ records:
 
 ### Why references are `@alias` and not Ids
 
-A spec is written before anything exists, so it cannot name Ids: they are assigned by the
-platform during apply. Every relationship is therefore declared against an `alias` that
-another record in the same spec carries, and written `@alias` wherever an Id would go.
-
-`@alias` rather than the alternatives, for three reasons. A Salesforce Id is 15 or 18
-alphanumeric characters and can never begin with `@`, so a reference is impossible to
-confuse with a literal — which lets the validator flag a literal Id as the mistake it
-usually is. YAML's own anchors and aliases (`&name`, `*name`) look right and are wrong: they
-copy a *value* at parse time, and what is needed is a reference to a record that does not
-exist yet. And `${alias}` collides with shell and templating tools that a spec will pass
-through.
+A spec is written before anything exists, so it cannot name Ids: the platform assigns them
+during apply. Every relationship is declared against an `alias` another entry carries and
+written `@alias` wherever an Id would go. A Salesforce Id can never begin with `@`, so a
+reference is impossible to confuse with a literal — which is what lets the validator flag a
+literal Id as the mistake it usually is. `references/marking-and-idempotency.md` records why
+YAML's own anchors are the wrong tool here, and why the spec is a constrained subset rather
+than general YAML.
 
 ### `lookups` — naming records that already exist
 
@@ -131,50 +121,24 @@ The rules are short, and two of them are absolute.
   nothing, or matches more than one record, **fails the preview and nothing is written.**
   There is no "pick the first" and no prompt to choose.
 - **A looked-up record is never created, modified or deleted.** It is the "do not touch what
-  this run did not create" rule in its purest form, so it needs no enforcement beyond the
-  shape: lookups never enter the log, and teardown reads only the log. Ignoring them is
-  structural rather than a check that could be forgotten.
+  this run did not create" rule in its purest form, and the shape enforces it: every log row
+  carries a `kind`, apply writes lookups as `kind: lookup` and creations as `kind: created`,
+  and teardown deletes only `created`. Ignoring a lookup is structural rather than a check
+  that could be forgotten.
 - **`marked_by` may not name a lookup.** Authorship is inherited only from a record this run
   creates; a pre-existing record carries no marker of ours.
 
-#### When the key is not unique
-
-`where` resolves against whatever field identifies the record, and on many objects nothing
-guarantees that field is unique. `Product2.ProductCode` is the case you will hit first: it is
-createable and updateable with `unique: false` and `idLookup: false` — PLATFORM (v68
-describe). A query returning exactly one row proves the key is unique **today**, and promises
-nothing about tomorrow.
-
-The validator classifies each lookup and says which it got:
-
-| Key | Meaning |
-|---|---|
-| **stable** | the `where` field is unique and idLookup, so it resolves to the same record in any org that has it |
-| **soft** | nothing enforces uniqueness; exactly-one today is all you know |
-
-A soft key is allowed, because refusing it would rule out products entirely. It carries two
-obligations instead. The validator warns **once per lookup**, not once per reference, so a
-spec with two products and ten components warns twice rather than twenty times. And **apply
-pins the resolved Id in the log**, so verify and teardown use the Id that was actually
-written and never re-resolve the key. Re-resolution is the failure this prevents: a second
-product acquiring the same code between apply and teardown would otherwise make teardown
-delete against a record it never created.
-
-Prefer a stable key where the object has one. `Code` and `GlobalKey` are unique and idLookup
-on 13 objects; `references/marking-and-idempotency.md` lists them.
+On many objects nothing guarantees the `where` field is unique — `Product2.ProductCode` is
+`unique: false, idLookup: false`, PLATFORM (v68 describe). The validator classifies each
+lookup as a **stable** key or a **soft** one and allows both, since refusing soft keys would
+rule out products entirely. A soft key warns **once per lookup rather than once per
+reference**, and **apply pins the resolved Id in the log** so verify and teardown never re-run
+the clause. `references/marking-and-idempotency.md` has the reasoning and the 13 objects with
+a standard stable key.
 
 With lookups available, a literal Id in a spec is not forbidden but is now genuinely rare,
 and the validator still warns on each one — telling you to declare it as a lookup instead.
 When that warning appears, it means something.
-
-### The subset, and why it is constrained
-
-Scripts here run with no third-party dependencies, and PyYAML is not available. The spec is
-therefore a deliberately small YAML subset: mappings, one nested level, lists of mappings
-under `lookups` and `records`, scalars, and `>` for the purpose block. No anchors, no flow style, no
-multi-line scalars elsewhere. `validate_spec.py` errors with a line number on anything
-outside it rather than guessing — a spec is a contract document, and a parser that guesses at
-a contract is worse than one that refuses.
 
 ## The cycle
 
@@ -183,7 +147,8 @@ Four phases, in order, every time.
 ### 1. preview — never skipped
 
 ```bash
-python3 plugins/rc-core/skills/rc-org-writer/scripts/validate_spec.py <spec.yaml>
+python3 plugins/rc-core/skills/rc-org-writer/scripts/validate_spec.py <spec.yaml> \
+    --target-org <alias>
 ```
 
 Reads the spec, validates it, resolves the references, orders the records by dependency, and
@@ -195,14 +160,28 @@ marking route its object actually supports, that a declared `key` is genuinely u
 idLookup on that object, that the marker token is present where it belongs, and that no field
 carries a literal Id unflagged.
 
-Then preview against the org: for each record, query whether something matching its key or
-its marked name already exists. A hit is reported and **stops the run**. Preview is also the
-only phase a reader can review, so its output is the artifact to put in front of someone.
+`--target-org` runs the half that only the org can answer: **every lookup must resolve to
+exactly one record**, and **nothing the spec creates may exist already**. A hit on either
+stops the run.
+
+Without `--target-org` it degrades to the offline checks and says so in as many words. That
+distinction is not academic: a spec whose lookup names a product that is not in the org
+passes every offline check and fails at apply. The offline pass tells you the spec is well
+formed, nothing more.
+
+Preview is the only phase a reader can review, so its output is the artifact to put in front
+of someone.
 
 ### 2. apply — only after explicit confirmation
 
+```bash
+python3 plugins/rc-core/skills/rc-org-writer/scripts/apply.py <spec.yaml> \
+    --target-org <alias> --log applied/<run>.jsonl --confirm
+```
+
 Creates the records in the dependency order preview printed. It runs **only** after a human
-has seen the preview and said yes to that specific preview. Not "yes to writing in general",
+has seen the preview and said yes to that specific preview; `--confirm` stands for that, and
+apply refuses without it. Not "yes to writing in general",
 not a confirmation carried over from an earlier run: the preview and the confirmation are a
 pair, and changing the spec voids the confirmation.
 
@@ -211,27 +190,41 @@ immediately:
 
 ```
 applied/<spec-name>-<utc-timestamp>.jsonl
-{"alias":"sched","object":"PriceAdjustmentSchedule","id":"84X...","marker":"RCW-20261125-A","at":"2026-11-25T18:04:11Z"}
+{"kind":"lookup","alias":"platform_bundle","object":"Product2","id":"01t...","where":{"ProductCode":"PLAT-BUNDLE"}}
+{"kind":"created","alias":"sched","object":"PriceAdjustmentSchedule","id":"84X...","marker":"RCW-20261126-A"}
 ```
+
+**Both kinds are recorded; only one is ever deleted.** A lookup is logged because verify and
+teardown need the Id it resolved to and must never re-run the `where`; it is not deleted
+because teardown filters on `kind: created`. Two different statements, which this body used
+to blur into "lookups never enter the log".
 
 Per record, because the run that matters is the one that fails halfway. A log written at the
 end leaves an interrupted apply with records in the org and no record of them — which is
 exactly the state teardown exists to prevent.
 
-**Append-and-flush narrows that window to one record; it does not close it.** Between the
-create returning an Id and the log line reaching disk there is an instant where the record
-exists and the log does not know it. A process killed exactly there leaves one orphan, and
-the log is not complete authority over what the run made. This is irreducible without a
-transaction the platform does not offer, so the mitigation is procedural: after any
-interrupted apply, query the target object for the marker token before re-running, and
-reconcile by hand. It is one record, and you know which object it was in — the next one the
-plan named.
+**Append-and-flush narrows that window to one record; it does not close it.** Between a
+create returning an Id and the log line reaching disk, the record exists and the log does not
+know it, so a process killed exactly there leaves one orphan and the log is not complete
+authority. Irreducible without a transaction the platform does not offer, so the mitigation
+is procedural: after an interrupted apply, query the target object for the marker before
+re-running. It is one record, and the plan named which object.
 
-If a create fails, apply stops. It does not continue past an error and it does not roll back
-what it already made: the log plus teardown is the rollback, and it is a separate, confirmed
-decision.
+**If a create fails, apply stops**, and the first run of this cycle against a real org is why
+that is stated as a rule rather than assumed. Driven by hand, a failed create did not stop
+the sequence: the following creates ran anyway, and two log lines were written with an empty
+Id. A log that lies is worse than no log, because teardown believes it. So apply stops at the
+first error, and **writes no log line for a create that returned no Id**.
+
+It does not roll back what it already made: the log plus teardown is the rollback, and that is
+a separate, confirmed decision.
 
 ### 3. verify — read it back and compare
+
+```bash
+python3 plugins/rc-core/skills/rc-org-writer/scripts/verify.py <spec.yaml> \
+    --target-org <alias> --log applied/<run>.jsonl
+```
 
 Re-queries every record in the log and compares it **field by field** against the spec.
 
@@ -243,6 +236,11 @@ its value. So verify reports three categories and hides none of them:
 - **expected differences** — a read-only projection the platform filled in, a default that
   appeared, `5` returned as `5.0`. Listed, not filtered. A verify that prints nothing is
   indistinguishable from one that did not run.
+
+  There are more of these than one would guess: a single `PriceAdjustmentTier` comes back
+  with **five** fields nobody wrote, and `EffectiveFrom` sent as `...000Z` returns as
+  `...000+0000`, the same instant written differently. **`verify.py` compares datetimes by
+  value**, and `references/marking-and-idempotency.md` has the per-object list.
 - **unexpected differences** — everything else. These are findings, and they are the reason
   the phase exists.
 
@@ -251,9 +249,20 @@ from the three build skills written so far.
 
 ### 4. teardown — exactly what this run created
 
-Deletes the records in the log, **in reverse creation order**, and nothing else. Not
+```bash
+python3 plugins/rc-core/skills/rc-org-writer/scripts/teardown.py \
+    --target-org <alias> --log applied/<run>.jsonl --confirm
+```
+
+Deletes the log's `kind: created` rows, **in reverse creation order**, and nothing else. Not
 everything matching the marker, not everything in the object: the log is the authority,
-because the log is the only thing that knows what this run made.
+because the log is the only thing that knows what this run made. `--dry-run` prints the list
+and stops.
+
+It is **idempotent over its own log**. A record already gone is reported as such and is not an
+error, so an interrupted teardown can simply be run again, and running the same log twice
+deletes nothing the second time. It also deduplicates on Id, because a log can carry the same
+record twice when a command block is pasted twice — which is how that was found.
 
 Reverse order because the dependencies that forced the apply order still hold: a schedule
 cannot go while its tiers point at it.
@@ -261,6 +270,44 @@ cannot go while its tiers point at it.
 Teardown is confirmed like apply, and reports what it could not remove —
 `AttributeAdjustmentCondition` cannot be deleted at all, and anything whose delete fails stays
 listed so a human can finish the job.
+
+### The four scripts
+
+One per phase, plus the plumbing they share. No third-party dependencies; `sf` is a
+subprocess and `--json` is how Ids are captured.
+
+| Script | Phase | Touches the org |
+|---|---|---|
+| `validate_spec.py` | preview | only with `--target-org`, read-only |
+| `apply.py` | apply | writes, and only with `--confirm` |
+| `verify.py` | verify | read-only |
+| `teardown.py` | teardown | deletes, and only with `--confirm` |
+
+`_orgio.py` holds what apply, verify and teardown share: the `sf` calls, the log,
+`@alias` resolution and the datetime comparison. It is not run directly.
+
+## A validator that reads metadata cannot be complete
+
+This is the most useful thing the first full run produced, and it changes what preview is
+for.
+
+`PriceAdjustmentTier.EffectiveFrom` is `nillable: true` in a v68 describe — optional, as
+far as metadata goes. The platform rejects a tier without it: *"Specify the Effective From
+date to save your price adjustment tier."* There are RCA validation rules that **no describe
+expresses**, so a validator reading field metadata is incomplete **by design**, not by
+omission. No amount of work on `validate_spec.py` closes that gap.
+
+The same run produced a second, harder case. A tier whose product is not assigned to the
+selling model it names is rejected, and that precondition lives on
+`ProductSellingModelOption` — an object the spec never mentions. **Two lookups that are
+each individually valid can be jointly invalid**, and nothing in the spec is wrong when they
+are.
+
+So: **preview against the org is not a luxury**, since it is the only phase that can find
+rules like these, and it finds them by asking rather than by reasoning about metadata. **A
+clean preview still does not promise apply will succeed** — apply surfaces the platform's
+message verbatim, because that message is the documentation for a rule that has none. And **a
+failed create is evidence**: record the sentence in `notes/`.
 
 ## Marking — how a record is known to be ours
 
@@ -274,30 +321,20 @@ available is **per object**, and for most objects the answer is "none". Surveyed
 | **Tier 2** | 22 | no unique field, but `Name` is createable: a reserved prefix |
 | **Tier 3** | 70 | `Name` is autonumbered, read-only or absent: nothing fits on the record |
 
-**`GlobalKey` was the obvious candidate and it is not enough.** PLATFORM (v68 describe) has
-it createable, updateable, unique and idLookup — so where it exists it solves authorship and
-idempotency in one field, and an upsert on it is exactly once. It exists on three objects:
-`PriceAdjustmentSchedule`, `Pricebook2` and `ProductRelationshipType`. `Code` behaves
-identically on ten more. That is 13 objects with a standard key out of 109.
+**`GlobalKey` was the obvious candidate and it is not enough**: unique and idLookup, and
+present on three objects; `Code` behaves identically on ten more. **Tier 3 is the common
+case, and it is the junctions** — tiers, components, selling-model options, price book
+entries, the adjustment children — so the records a build skill creates most of are the
+ones that can carry no mark. Each declares **`marked_by`**, naming a record in the same spec
+that can carry one and that its required lookup points at.
 
-**Tier 3 is the common case, and it is the junctions.** `PriceAdjustmentTier`,
-`ProductRelatedComponent`, `ProductSellingModelOption`, `PricebookEntry`,
-`AttributeBasedAdjustment`, `BundleBasedAdjustment`, `ProductCategoryProduct` — the records a
-build skill creates most of are precisely the ones that can carry no mark. So:
+That inheritance is sound when the lookup is **create-only**. It **fails where the required
+parent is pre-existing** — a `ProductRelatedComponent` needs a `ParentProductId` that in a
+demo org is usually not ours — and there **the log is the only evidence**. Prefer attaching
+to a parent this run also created. `Product2` has no standard upsert key at all, which makes
+products the most dangerous thing a spec can create in a loaded catalog.
 
-- A tier-3 record declares **`marked_by`**, naming a record in the same spec that can carry a
-  marker and that this record's required lookup points at. Authorship is inherited.
-- That inheritance is sound when the lookup is **create-only**, because the child then cannot
-  be moved off its parent. `PriceAdjustmentTier.PriceAdjustmentScheduleId` is exactly this.
-- It fails where the required parent is pre-existing. A `ProductRelatedComponent` needs a
-  `ParentProductId`, and in a demo org that product is usually not ours. Such a record is ours
-  by creation and hangs off something that is not, so **the log is the only evidence**. Prefer
-  attaching to a group this run also created, and treat the rest as the named gap it is.
-
-**`Product2` has no standard upsert key.** `ExternalId`, `ProductCode` and
-`StockKeepingUnit` are all `unique: false, idLookup: false` — plain text despite the names.
-That makes products the most dangerous thing a spec can create in a demo catalog, and a spec
-that creates them says so in `purpose`.
+`references/marking-and-idempotency.md` works all of this through per object.
 
 ## Guardrails
 
@@ -311,12 +348,19 @@ These are half the value of this skill. Each one is a rule the cycle enforces, n
   something that already exists, preview reports it and stops. It does not assume it may
   overwrite. This is the rule that protects demo material, and it has no exceptions. A record
   reached through `lookups` is the same rule seen from the other side: referenced, never
-  written, never in the log, so teardown cannot reach it even by mistake.
+  written, and recorded in the log only as `kind: lookup`, which teardown skips.
 - **A lookup resolves to exactly one record or the preview fails.** Zero matches and two
   matches are both errors, and neither is negotiable at apply time.
 - **Applying twice must not duplicate.** Tier 1 upserts on its key and is exactly once. Tier 2
   is query-then-skip, which is adequate for one operator and **is not safe against two
   concurrent runs** — say so rather than implying stronger.
+- **Some objects are stronger than their marking tier suggests, within a narrow scope.**
+  `PriceAdjustmentTier` is tier 3 and has no marker, yet the platform refuses a tier whose
+  range overlaps another under the same schedule: *"The tiers must have unique effective date
+  ranges and lower and upper bound value ranges."* So **re-applying an identical tier spec
+  cannot duplicate, and the platform guarantees it rather than the cycle.** The scope is
+  exactly that: tiers with different ranges coexist happily, so this is not general
+  idempotency and must not be quoted as such.
 - **Nothing is ever updated, including a record this run created.** There is no update phase;
   see above for the inactive-then-activate case and how it is handled outside the cycle.
 - **Correction is delete-and-recreate, as the normal case.** Create-only fields are everywhere
@@ -340,35 +384,29 @@ claude.ai has no shell, and the Salesforce connector has `createSobjectRecord`,
 session, which makes it **more** important that the guardrails live in this body and not only
 in a script: in that branch there is no script, and this text is the entire contract.
 
-Run the four phases the same way, by hand:
+Run the four phases by hand, in order:
 
-- **preview.** Parse the spec yourself and print the plan: every record, every field, the
-  dependency order, and the marking route per object. Use `getObjectSchema` on each object to
-  confirm the marking tier and that every field in the spec is createable — the validator's
-  offline checks are what you are reproducing, and `references/marking-and-idempotency.md`
-  has the per-object answers already worked out. Then `soqlQuery` for each record's key or
-  marked name to prove it does not exist yet. Show all of it before asking.
+- **preview.** Reproduce the validator's offline checks with `getObjectSchema` per object
+  (`references/marking-and-idempotency.md` has the per-object answers worked out), then
+  `soqlQuery` each lookup to prove it resolves to exactly one, and each `key` to prove the
+  record does not exist yet. Show all of it before asking.
 - **apply.** `createSobjectRecord` in dependency order, after an explicit yes to that
-  preview. **Write the log into the conversation as you go** — object, alias, returned Id,
-  one line per record, immediately after each create. That transcript is the log, and it is
-  the only thing a teardown will have. Do not batch the ids up and print them at the end: if
-  the session is interrupted, what has been printed is what is recoverable.
+  preview. **Write the log into the conversation as you go**, one line per record with the
+  returned Id, immediately after each create. Stop at the first failure, and write no line
+  for a create that returned no Id.
+- **verify.** `soqlQuery` each created Id back, comparing by value and reporting matches,
+  expected differences and unexpected differences separately.
+- **teardown.** `deleteSobjectRecord` in reverse order, from the logged ids, and nothing else.
 
-  **This is the weak point of the branch, and it is worth saying plainly.** A conversation is
-  not durable storage. If the session is lost, or compacted so that earlier turns are
-  summarised away, the ids go with it and teardown has no source — the records stay in the
-  org with nothing but the marker to find them by, and on the two thirds of objects that
-  carry no marker, not even that. For anything beyond a handful of records, **use the terminal
-  branch**, where the log is a file. Where the chat branch is the only option, keep the spec
-  small enough that the whole transcript fits in one screen, and copy the ids somewhere
-  durable before moving on.
-- **verify.** `soqlQuery` each created Id back and compare field by field against the spec,
-  reporting matches, expected differences and unexpected differences separately.
-- **teardown.** `deleteSobjectRecord` in reverse order, from the ids in the transcript, and
-  nothing else.
+**The weak point of this branch is the log, and it is worth saying plainly.** The transcript
+is the log, and a conversation is not durable storage: if the session is lost or compacted,
+the ids go with it and teardown has no source — the records stay in the org with nothing but
+the marker to find them by, and on the 70 objects that carry no marker, not even that. For
+anything past a handful of records **use the terminal branch**, where the log is a file.
+Otherwise keep the spec small enough that the whole transcript fits on one screen, and copy
+the ids somewhere durable before moving on.
 
-`updateSobjectRecord` is available in that branch and is **not** part of this cycle. See
-below for why, and for the one case that argues against it.
+`updateSobjectRecord` is available here and is **not** part of this cycle; see below.
 
 ## There is no update path, and that is deliberate
 
@@ -378,25 +416,22 @@ default with exceptions, because "update is fine when I am sure" is how a write 
 being reversible. A delete-and-recreate leaves the log the authority on what exists; an
 in-place edit leaves the log describing a record that no longer matches it.
 
-The create-only fields make this cheap most of the time: `PriceAdjustmentScheduleId` on a
-tier, every product lookup on a component, both role categories on a relationship type.
-Those could not be edited anyway, so for a large part of this model delete-and-recreate was
-never a choice.
+The create-only fields make this cheap most of the time — a tier's schedule lookup, every
+product lookup on a component, both role categories on a relationship type. Those could not
+be edited anyway.
 
-**The case that argues against the rule**, and it is a real one: create a schedule inactive,
-load its tiers, then activate it once the tiers are in place, so the configuration is never
-live in a half-built state. That final flip is an update to a record this run created, and
-this contract does not express it.
+**The case that argues against the rule** is real: create a schedule inactive, load its
+tiers, then activate it so the configuration is never live half-built. That flip is an update
+to a record this run created, and the contract does not express it.
 
-**It is out of scope, and here is how to get the same result.** Build the spec with the
-schedule inactive. Run preview, apply and verify. Then a human activates the one field,
-deliberately, outside the cycle, having read the verify output first. That flip is a decision
-someone makes with the evidence in front of them rather than a step a script performs, which
-is the right shape for the moment a configuration goes live. Record it in the spec's
-`purpose` so the next reader knows the spec alone does not leave the org finished.
+**It is out of scope, and the same result is available.** Build the spec inactive, preview,
+apply, verify, then have a human activate the one field having read the verify output. That
+is a decision made with the evidence in hand rather than a step a script performs, which is
+the right shape for the moment a configuration goes live — note it in `purpose` so the next
+reader knows the spec alone does not leave the org finished.
 
-What this rules out is a spec that is a sequence of states. If a task needs that, it needs a
-different contract, and inventing one inside a build skill is how the loosest standard wins.
+What this rules out is a spec that is a sequence of states. That needs a different contract,
+and inventing one inside a build skill is how the loosest standard wins.
 
 ## Verified anchors
 
@@ -418,33 +453,54 @@ Per-object detail, with the counts behind the tier table, in
   `ParentSellingModelId` are createable and not updateable.
 - **DOCS** — `AttributeAdjustmentCondition`'s supported calls omit `delete()` and
   `undelete()`, while `AttributeBasedAdjRule` has both. (Salesforce Pricing)
+- **PLATFORM (v68, observed)** — `GlobalKey` is writable and genuinely unique: a duplicate
+  insert was refused by the platform's own index, naming the colliding record, not by an RCA
+  validation rule. See **Not verified** for what that does and does not prove.
+- **PLATFORM (v68, observed)** — `PriceAdjustmentTier` is tier 3 as its metadata says: its
+  `Name` is `autoNumber: true, createable: false`, and a created record came back numbered.
+- **PLATFORM (v68, observed)** — teardown in reverse creation order succeeds and leaves the
+  org as it was, with referenced records untouched throughout.
+- **PLATFORM (v68, observed)** — `PriceAdjustmentTier.EffectiveFrom` is `nillable: true` in
+  the describe and rejected when absent: *"Specify the Effective From date to save your price
+  adjustment tier."*
+- **PLATFORM (v68, observed)** — a `PriceAdjustmentTier` whose bounds overlap another under
+  the same schedule is refused: *"The tiers must have unique effective date ranges and lower
+  and upper bound value ranges."*
 
 ## Not verified
 
-- **No spec has been applied to an org yet.** This contract is written from the describes and
-  from what the three read-only build skills found. The cycle is unexercised end to end, and
-  the first real apply should be a spec small enough to read in full.
-- **Upsert-on-key has not been executed.** That `GlobalKey` and `Code` being unique and
-  idLookup makes an upsert exactly once is read off the describe, not observed. Prove it with
-  a two-record spec applied twice before relying on it.
+- **The cycle has been run once, by hand, on one org.** A `PriceAdjustmentSchedule` plus
+  three `PriceAdjustmentTier` rows, through preview, apply, verify and teardown. Everything
+  marked *observed* above comes from that run and has **not been replicated on a second org**,
+  so it is unvalidated under the pack's notes protocol. The scripts here were written from it
+  and have not themselves been run end to end.
+- **Upsert-on-key is still unproven.** The run showed that a *duplicate insert* on `GlobalKey`
+  is refused by the platform's index. That is a different claim from an upsert being exactly
+  once, which was never executed. Prove it with a two-record spec applied twice before relying
+  on it.
+- **Autonumbered names do not reset when records are deleted.** A failed or torn-down apply
+  leaves gaps in sequences like `PAT-00000000nn`, and teardown does not and cannot reclaim
+  them. Harmless, but it means the org is not byte-identical after a teardown even when it is
+  structurally identical — do not use name continuity as evidence that nothing ran.
 - **Whether deleting `AttributeBasedAdjRule` cascades to its conditions.** The conditions
-  cannot be deleted directly and nothing in the pack says what happens to them when the rule
-  goes. A spec that creates attribute conditions is not known to be cleanly reversible.
-- **Whether tier-2 query-then-skip is adequate in practice.** `Name` is idLookup and not
-  unique, so the race is real in principle. How likely it is with one operator is a guess.
-- **What the platform normalises.** The expected-difference list in the reference is
-  assembled from field metadata and the other skills' findings, not from a verify run that
-  produced them.
-- **The 17/22/70 split counts the objects this pack seeds**, and four of the 17 rest on
-  custom fields that exist in one org rather than in Revenue Cloud. An org with different
-  custom fields splits differently, which is why the validator reads the target org's own
-  describes rather than trusting this table.
+  cannot be deleted directly and nothing says what happens to them, so a spec creating them
+  is not known to be cleanly reversible.
+- **Whether tier-2 query-then-skip is adequate in practice.** The race is real in principle;
+  how likely it is with one operator is a guess.
+- **What the platform normalises, beyond what one run showed.** The datetime offset
+  rewriting and the five projections on `PriceAdjustmentTier` were observed. The rest of the
+  expected-difference list is still assembled from field metadata rather than from a verify
+  pass that produced it, so treat the list as a starting point and add to it as runs reveal
+  more.
+- **The 17/22/70 split counts the objects this pack seeds**, four of them on custom fields
+  local to one org. Another org splits differently, which is why the validator reads the
+  target org's own describes rather than this table.
 
 ## For a build skill that uses this one
 
-Declare `writes: true` in your frontmatter, say in your description that you write to an org,
-and name your preview, your confirmation and your teardown in your body. Do not re-implement
-the cycle: emit a spec and run it through these phases. A build skill's job is knowing *what*
-should exist in the org — that is domain doctrine, and it lives in `rc-catalog-selling-models`,
-`rc-pricing-adjustments` and `rc-bundles`. Knowing how to put it there safely is this skill's
-job, and there should be exactly one answer to it in the repository.
+Declare `writes: true`, say in your description that you write to an org, and name your
+preview, confirmation and teardown in your body. Do not re-implement the cycle: emit a spec
+and run it through these scripts. A build skill's job is knowing *what* should exist —
+domain doctrine, in `rc-catalog-selling-models`, `rc-pricing-adjustments` and `rc-bundles`.
+Knowing how to put it there safely is this skill's job, and there should be one answer to
+that in the repository.

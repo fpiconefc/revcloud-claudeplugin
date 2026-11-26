@@ -100,6 +100,33 @@ down directly: teardown deletes the rule and relies on the cascade, which is **n
 verified** — nothing in the pack confirms the conditions go with it. Treat a spec that
 creates attribute conditions as not cleanly reversible, and say so in its `purpose`.
 
+## Why the spec looks the way it does
+
+Two design choices that the body states without arguing, recorded here with the argument.
+
+### `@alias` rather than the alternatives
+
+A spec is written before anything exists, so it cannot name Ids: they are assigned by the
+platform during apply. Every relationship is therefore declared against an `alias` that
+another record in the same spec carries, and written `@alias` wherever an Id would go.
+
+`@alias` rather than the alternatives, for three reasons. A Salesforce Id is 15 or 18
+alphanumeric characters and can never begin with `@`, so a reference is impossible to
+confuse with a literal — which lets the validator flag a literal Id as the mistake it
+usually is. YAML's own anchors and aliases (`&name`, `*name`) look right and are wrong: they
+copy a *value* at parse time, and what is needed is a reference to a record that does not
+exist yet. And `${alias}` collides with shell and templating tools that a spec will pass
+through.
+
+### A constrained YAML subset
+
+Scripts here run with no third-party dependencies, and PyYAML is not available. The spec is
+therefore a deliberately small YAML subset: mappings, one nested level, lists of mappings
+under `lookups` and `records`, scalars, and `>` for the purpose block. No anchors, no flow style, no
+multi-line scalars elsewhere. `validate_spec.py` errors with a line number on anything
+outside it rather than guessing — a spec is a contract document, and a parser that guesses at
+a contract is worse than one that refuses.
+
 ## Resolving a record the spec does not create
 
 A `lookups` entry identifies an existing record by a `where` clause rather than an Id, so the
@@ -160,14 +187,23 @@ Field-by-field comparison between the spec and the org will differ for reasons t
 not errors. From the two build skills written so far:
 
 - **Read-only projections fill themselves in.** A `PriceAdjustmentTier` comes back with
-  `ScheduleType`, `SellingModelType`, `PricingTerm`, `PricingTermUnit` and
-  `AdjustmentType` populated from the schedule and the selling model, none of which the
-  spec set.
+  **five** fields the spec never set — `AdjustmentType`, `ScheduleType`, `SellingModelType`,
+  `PricingTerm` and `PricingTermUnit` — projected from the schedule and the selling model.
+  Observed on a real create, API v68. `ProductRelatedComponent` has three of its own
+  (`ParentProductRole`, `ChildProductRole`, `UnitOfMeasureId`), and the attribute and bundle
+  adjustment objects four or more each; `verify.py` carries the per-object list.
+- **Autonumbered names arrive unasked.** A tier's `Name` came back `PAT-0000000007`. The
+  sequence does not reset when records are deleted, so a torn-down run leaves a permanent gap
+  and name continuity is not evidence that nothing ran.
 - **Labels are not values.** `PricingTermUnit` value `Annual` is labelled "Years"; every
   one of the nine role values differs from its label. Compare API values.
 - **Defaults appear.** `QuantityScaleMethod` defaults to `Proportional`,
   `IsComponentRequired` and friends to `false`.
 - **Numbers normalise.** A `double` sent as `5` returns as `5.0`.
+- **Datetimes come back in a different notation.** `2027-01-01T00:00:00.000Z` sent returns as
+  `2027-01-01T00:00:00.000+0000`: identical instant, different string, and a literal
+  comparison reports a difference that is not one. Compare datetimes by value;
+  `_orgio.same_instant` is what `verify.py` uses.
 
 Report these as *expected differences*, listed, rather than filtering them out silently. A
 verify that prints nothing is indistinguishable from a verify that did not run.

@@ -10,8 +10,14 @@ because skills in this repo run with no third-party dependencies. Anything outsi
 the subset is an error with a line number, never a guess. See
 assets/spec-template.yaml for the shape and SKILL.md for the contract.
 
+With --target-org it also runs the half of the preview that needs the org: every
+lookup must resolve to exactly one record, and nothing the spec creates may exist
+already. Without it, it degrades to the offline checks and says so -- a spec whose
+lookup names a product that is not there passes offline and fails at apply.
+
 Usage:
     python3 validate_spec.py <spec.yaml>
+    python3 validate_spec.py <spec.yaml> --target-org <alias>
     python3 validate_spec.py <spec.yaml> --pack /path/to/revenue-cloud
 
 Exit codes: 0 the spec is valid, 1 errors found, 2 bad invocation.
@@ -450,9 +456,62 @@ def order(records: list[dict]) -> list[dict]:
     return out
 
 
+def soql_literal(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return "'" + str(value).replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def preview_against_org(doc: dict, org: str) -> tuple[list[str], list[str]]:
+    """The half of the preview the describes cannot answer.
+
+    Two questions, both of which only the org can settle: does each lookup resolve
+    to exactly one record, and does anything the spec means to create exist already?
+    """
+    import _orgio as org_io
+
+    errors: list[str] = []
+    notes: list[str] = []
+    try:
+        for lk in doc.get("lookups") or []:
+            alias, obj = lk.get("alias"), lk.get("object")
+            clause = lk.get("where") or {}
+            if not (alias and obj and clause):
+                continue
+            where = " AND ".join(f"{k} = {soql_literal(v)}" for k, v in clause.items())
+            rows = org_io.query(org, f"SELECT Id FROM {obj} WHERE {where} LIMIT 2")
+            if len(rows) == 1:
+                notes.append(f"lookup @{alias} resolves to {rows[0]['Id']}")
+            else:
+                errors.append(
+                    f"lookup @{alias} on {obj} matches {len(rows)} records, not 1 "
+                    f"({where})"
+                )
+
+        for rec in doc.get("records") or []:
+            alias, obj, key = rec.get("alias"), rec.get("object"), rec.get("key")
+            fields = rec.get("fields") or {}
+            if not (alias and obj and key and key in fields):
+                continue
+            value = soql_literal(fields[key])
+            rows = org_io.query(org, f"SELECT Id FROM {obj} WHERE {key} = {value} LIMIT 2")
+            if rows:
+                errors.append(
+                    f"record @{alias}: a {obj} with {key} = {fields[key]!r} already "
+                    f"exists ({rows[0]['Id']}). This run did not create it, so it is "
+                    "not ours to overwrite."
+                )
+    except org_io.OrgError as exc:
+        errors.append(f"could not preview against the org: {exc}")
+    return errors, notes
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Validate an rc-org-writer spec.")
     ap.add_argument("spec", type=Path)
+    ap.add_argument("--target-org", help="also run the preview checks that need the org")
     ap.add_argument("--pack", type=Path, default=DEFAULT_PACK)
     args = ap.parse_args()
 
@@ -519,18 +578,32 @@ def main() -> int:
                     shown = f"-> @{ref} ({kind})"
                 print(f"       {fname:28s} {shown}")
 
+    org_notes: list[str] = []
+    if args.target_org:
+        org_errors, org_notes = preview_against_org(doc, args.target_org)
+        errors.extend(org_errors)
+
     print()
+    if org_notes:
+        for note in org_notes:
+            print(f"    org:   {note}")
     for e in errors:
         print(f"    error: {e}")
     for w in warnings:
         print(f"    warn:  {w}")
     print()
     print(f"[{'FAIL' if errors else 'ok'}] {len(errors)} error(s), {len(warnings)} warning(s)")
-    if not errors:
-        print("Valid. This checked the spec, not the org. Preview against the org before")
-    print("apply: lookups must each resolve to exactly one record, and nothing the spec")
-    print("creates may exist already.")
-    return 1 if errors else 0
+    if errors:
+        return 1
+    if args.target_org:
+        print(f"Valid, and previewed against {args.target_org}: every lookup resolves to")
+        print("exactly one record, and nothing the spec creates exists yet. The org can")
+        print("still refuse a create for a rule no describe expresses; apply reports it.")
+    else:
+        print("Valid OFFLINE ONLY. The spec is well formed, but the org was not consulted,")
+        print("so a lookup resolving to nothing and a record that already exists would both")
+        print("pass here and fail at apply. Re-run with --target-org before applying.")
+    return 0
 
 
 if __name__ == "__main__":
