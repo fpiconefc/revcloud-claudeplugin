@@ -100,6 +100,40 @@ down directly: teardown deletes the rule and relies on the cascade, which is **n
 verified** — nothing in the pack confirms the conditions go with it. Treat a spec that
 creates attribute conditions as not cleanly reversible, and say so in its `purpose`.
 
+## Resolving a record the spec does not create
+
+A `lookups` entry identifies an existing record by a `where` clause rather than an Id, so the
+spec stays portable between orgs. Whether that clause is trustworthy is the same question as
+tier 1 above, asked from the other direction.
+
+**A stable key** is a field that is createable, unique and idLookup — the 17 objects listed
+above, of which 13 use the standard `Code` or `GlobalKey`. A `where` on one of those resolves
+to the same record in any org that has it, and nothing can quietly make it ambiguous later.
+
+**A soft key** is anything else, and it is the common case for the object specs reference
+most. `Product2` has no standard unique field at all: `ProductCode`, `StockKeepingUnit` and
+`ExternalId` are each `unique: false, idLookup: false` — PLATFORM (v68 describe). A query on
+`ProductCode` returning exactly one row is a fact about the org right now, not a constraint
+the platform will keep.
+
+The contract handles that in three parts rather than forbidding it:
+
+1. **Preview fails unless the clause matches exactly one record.** Zero and two are both
+   errors. This is the only moment the resolution is allowed to be ambiguous, and it is
+   resolved by stopping.
+2. **Apply pins the resolved Id in the run log.** Verify and teardown read that Id and never
+   re-run the `where`. A second product acquiring the same code afterwards cannot redirect a
+   later phase at a record the run never touched.
+3. **The validator warns once per lookup, not once per reference.** A spec with two products
+   and ten components produces two warnings rather than twenty, which is what keeps the
+   warning worth reading.
+
+Looked-up records never enter the log as created rows, so teardown cannot reach them. That is
+structural: the delete list is the log, and they are not in it.
+
+Fields usable in a `where` clause must be filterable; the validator checks that against the
+describe and rejects a clause naming a field the object does not have.
+
 ## Create-only fields make correction a delete
 
 A field that is createable and not updateable cannot be fixed in place. Known cases, all

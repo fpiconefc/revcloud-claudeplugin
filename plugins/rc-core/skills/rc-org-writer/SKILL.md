@@ -67,30 +67,26 @@ spec: rc-org-writer/v1
 target:
   org: <target-org-alias>
 author: <who is accountable>
-created: '2026-11-25'
+created: '2026-11-26'
 purpose: >
   Why these records should exist.
 marker:
-  token: RCW-20261125-A
+  token: RCW-20261126-A
+lookups:
+  - alias: platform_bundle
+    object: Product2
+    where:
+      ProductCode: PLAT-BUNDLE
 records:
-  - alias: sched
-    object: PriceAdjustmentSchedule
-    key: GlobalKey
+  - alias: support_group
+    object: ProductComponentGroup
+    key: Code
     fields:
-      Name: RCW-20261125-A volume policy
-      GlobalKey: RCW-20261125-A-sched
-      ScheduleType: Volume
-      AdjustmentMethod: Range
-      IsActive: true
-  - alias: tier_low
-    object: PriceAdjustmentTier
-    marked_by: sched
-    fields:
-      PriceAdjustmentScheduleId: '@sched'
-      LowerBound: 100
-      UpperBound: 250
-      TierType: AdjustmentPercentage
-      TierValue: 5
+      Name: RCW-20261126-A Support
+      Code: RCW-20261126-A-support
+      ParentProductId: '@platform_bundle'
+      MinBundleComponents: 0
+      MaxBundleComponents: 1
 ```
 
 ### Why references are `@alias` and not Ids
@@ -107,15 +103,75 @@ copy a *value* at parse time, and what is needed is a reference to a record that
 exist yet. And `${alias}` collides with shell and templating tools that a spec will pass
 through.
 
-A literal Id in a spec is not forbidden — sometimes a new tier genuinely belongs under an
-existing schedule — but the validator warns on every one, because an Id is a record **this
-run does not own** and therefore must not modify or delete.
+### `lookups` — naming records that already exist
+
+Most specs attach to something already in the org. A bundle spec needs `ParentProductId` and
+`ChildProductId` on every component, pointing at products nobody is creating; ten components
+is twenty such references.
+
+Writing those as literal Ids breaks two things at once. The spec stops being portable — Ids
+differ between sandbox and production, so a spec pinned to them runs in exactly one org,
+which defeats half the reason for having a spec at all. And it buries the warning: a check
+that fires twenty times on a correct spec teaches people to ignore the validator.
+
+So a pre-existing record is declared under `lookups`, by a stable key rather than an Id, and
+referenced with the same `@alias` syntax as anything the spec creates:
+
+```yaml
+lookups:
+  - alias: platform_bundle
+    object: Product2
+    where:
+      ProductCode: PLAT-BUNDLE
+```
+
+The rules are short, and two of them are absolute.
+
+- **Preview resolves each lookup by query against the target org.** A lookup that matches
+  nothing, or matches more than one record, **fails the preview and nothing is written.**
+  There is no "pick the first" and no prompt to choose.
+- **A looked-up record is never created, modified or deleted.** It is the "do not touch what
+  this run did not create" rule in its purest form, so it needs no enforcement beyond the
+  shape: lookups never enter the log, and teardown reads only the log. Ignoring them is
+  structural rather than a check that could be forgotten.
+- **`marked_by` may not name a lookup.** Authorship is inherited only from a record this run
+  creates; a pre-existing record carries no marker of ours.
+
+#### When the key is not unique
+
+`where` resolves against whatever field identifies the record, and on many objects nothing
+guarantees that field is unique. `Product2.ProductCode` is the case you will hit first: it is
+createable and updateable with `unique: false` and `idLookup: false` — PLATFORM (v68
+describe). A query returning exactly one row proves the key is unique **today**, and promises
+nothing about tomorrow.
+
+The validator classifies each lookup and says which it got:
+
+| Key | Meaning |
+|---|---|
+| **stable** | the `where` field is unique and idLookup, so it resolves to the same record in any org that has it |
+| **soft** | nothing enforces uniqueness; exactly-one today is all you know |
+
+A soft key is allowed, because refusing it would rule out products entirely. It carries two
+obligations instead. The validator warns **once per lookup**, not once per reference, so a
+spec with two products and ten components warns twice rather than twenty times. And **apply
+pins the resolved Id in the log**, so verify and teardown use the Id that was actually
+written and never re-resolve the key. Re-resolution is the failure this prevents: a second
+product acquiring the same code between apply and teardown would otherwise make teardown
+delete against a record it never created.
+
+Prefer a stable key where the object has one. `Code` and `GlobalKey` are unique and idLookup
+on 13 objects; `references/marking-and-idempotency.md` lists them.
+
+With lookups available, a literal Id in a spec is not forbidden but is now genuinely rare,
+and the validator still warns on each one — telling you to declare it as a lookup instead.
+When that warning appears, it means something.
 
 ### The subset, and why it is constrained
 
 Scripts here run with no third-party dependencies, and PyYAML is not available. The spec is
-therefore a deliberately small YAML subset: mappings, one nested level, a list of mappings
-under `records`, scalars, and `>` for the purpose block. No anchors, no flow style, no
+therefore a deliberately small YAML subset: mappings, one nested level, lists of mappings
+under `lookups` and `records`, scalars, and `>` for the purpose block. No anchors, no flow style, no
 multi-line scalars elsewhere. `validate_spec.py` errors with a line number on anything
 outside it rather than guessing — a spec is a contract document, and a parser that guesses at
 a contract is worse than one that refuses.
@@ -160,8 +216,16 @@ applied/<spec-name>-<utc-timestamp>.jsonl
 
 Per record, because the run that matters is the one that fails halfway. A log written at the
 end leaves an interrupted apply with records in the org and no record of them — which is
-exactly the state teardown exists to prevent. Append-and-flush means an interrupted run is
-still fully reversible.
+exactly the state teardown exists to prevent.
+
+**Append-and-flush narrows that window to one record; it does not close it.** Between the
+create returning an Id and the log line reaching disk there is an instant where the record
+exists and the log does not know it. A process killed exactly there leaves one orphan, and
+the log is not complete authority over what the run made. This is irreducible without a
+transaction the platform does not offer, so the mitigation is procedural: after any
+interrupted apply, query the target object for the marker token before re-running, and
+reconcile by hand. It is one record, and you know which object it was in — the next one the
+plan named.
 
 If a create fails, apply stops. It does not continue past an error and it does not roll back
 what it already made: the log plus teardown is the rollback, and it is a separate, confirmed
@@ -243,12 +307,18 @@ These are half the value of this skill. Each one is a rule the cycle enforces, n
   has read.
 - **Confirmation is per preview.** Editing the spec voids it. Approval to write once is not
   approval to write again.
-- **Never modify or delete a record this run did not create.** If the spec asks for something
-  that already exists, preview reports it and stops. It does not assume it may overwrite. This
-  is the rule that protects demo material, and it has no exceptions.
+- **Never modify or delete a record this run did not create.** If the spec asks to create
+  something that already exists, preview reports it and stops. It does not assume it may
+  overwrite. This is the rule that protects demo material, and it has no exceptions. A record
+  reached through `lookups` is the same rule seen from the other side: referenced, never
+  written, never in the log, so teardown cannot reach it even by mistake.
+- **A lookup resolves to exactly one record or the preview fails.** Zero matches and two
+  matches are both errors, and neither is negotiable at apply time.
 - **Applying twice must not duplicate.** Tier 1 upserts on its key and is exactly once. Tier 2
   is query-then-skip, which is adequate for one operator and **is not safe against two
   concurrent runs** — say so rather than implying stronger.
+- **Nothing is ever updated, including a record this run created.** There is no update phase;
+  see above for the inactive-then-activate case and how it is handled outside the cycle.
 - **Correction is delete-and-recreate, as the normal case.** Create-only fields are everywhere
   in this model: `PriceAdjustmentTier.PriceAdjustmentScheduleId`, every product lookup on
   `ProductRelatedComponent` and `BundleBasedAdjustment`, both role categories on
@@ -283,15 +353,50 @@ Run the four phases the same way, by hand:
   one line per record, immediately after each create. That transcript is the log, and it is
   the only thing a teardown will have. Do not batch the ids up and print them at the end: if
   the session is interrupted, what has been printed is what is recoverable.
+
+  **This is the weak point of the branch, and it is worth saying plainly.** A conversation is
+  not durable storage. If the session is lost, or compacted so that earlier turns are
+  summarised away, the ids go with it and teardown has no source — the records stay in the
+  org with nothing but the marker to find them by, and on the two thirds of objects that
+  carry no marker, not even that. For anything beyond a handful of records, **use the terminal
+  branch**, where the log is a file. Where the chat branch is the only option, keep the spec
+  small enough that the whole transcript fits in one screen, and copy the ids somewhere
+  durable before moving on.
 - **verify.** `soqlQuery` each created Id back and compare field by field against the spec,
   reporting matches, expected differences and unexpected differences separately.
 - **teardown.** `deleteSobjectRecord` in reverse order, from the ids in the transcript, and
   nothing else.
 
-`updateSobjectRecord` is available in that branch and is **not** part of this cycle. Apply
-creates; correction deletes and recreates. The one legitimate use is reversing a field the
-platform normalised on a record this run created, and that is a finding to report before it
-is a change to make.
+`updateSobjectRecord` is available in that branch and is **not** part of this cycle. See
+below for why, and for the one case that argues against it.
+
+## There is no update path, and that is deliberate
+
+Apply creates. Correction deletes and recreates. **The cycle has no phase that modifies a
+record, including one it created itself**, and the guardrail is absolute rather than a
+default with exceptions, because "update is fine when I am sure" is how a write cycle stops
+being reversible. A delete-and-recreate leaves the log the authority on what exists; an
+in-place edit leaves the log describing a record that no longer matches it.
+
+The create-only fields make this cheap most of the time: `PriceAdjustmentScheduleId` on a
+tier, every product lookup on a component, both role categories on a relationship type.
+Those could not be edited anyway, so for a large part of this model delete-and-recreate was
+never a choice.
+
+**The case that argues against the rule**, and it is a real one: create a schedule inactive,
+load its tiers, then activate it once the tiers are in place, so the configuration is never
+live in a half-built state. That final flip is an update to a record this run created, and
+this contract does not express it.
+
+**It is out of scope, and here is how to get the same result.** Build the spec with the
+schedule inactive. Run preview, apply and verify. Then a human activates the one field,
+deliberately, outside the cycle, having read the verify output first. That flip is a decision
+someone makes with the evidence in front of them rather than a step a script performs, which
+is the right shape for the moment a configuration goes live. Record it in the spec's
+`purpose` so the next reader knows the spec alone does not leave the org finished.
+
+What this rules out is a spec that is a sequence of states. If a task needs that, it needs a
+different contract, and inventing one inside a build skill is how the loosest standard wins.
 
 ## Verified anchors
 

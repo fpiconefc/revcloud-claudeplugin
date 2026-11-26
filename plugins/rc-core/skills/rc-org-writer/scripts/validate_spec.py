@@ -31,6 +31,8 @@ REFERENCE = re.compile(r"^@([A-Za-z_][A-Za-z0-9_]*)$")
 SALESFORCE_ID = re.compile(r"^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$")
 ALIAS = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 RECORD_KEYS = {"alias", "object", "key", "marked_by", "fields"}
+LOOKUP_KEYS = {"alias", "object", "where"}
+LIST_SECTIONS = ("records", "lookups")
 REQUIRED_META = ("target", "author", "created", "purpose", "marker")
 
 
@@ -73,7 +75,7 @@ def parse(text: str) -> dict:
     """Parse the constrained subset: top-level mappings, one nested mapping level,
     a list of mappings under `records`, and a list of scalars elsewhere."""
     doc: dict = {}
-    records: list[dict] = []
+    lists: dict[str, list[dict]] = {name: [] for name in LIST_SECTIONS}
     current: dict | None = None      # record being built
     section: str | None = None       # top-level key currently open
     nested: dict | None = None       # a one-level nested mapping (target, marker, fields)
@@ -100,11 +102,13 @@ def parse(text: str) -> dict:
         # a list item
         if body.startswith("- "):
             item = body[2:].strip()
-            if section == "records":
+            if section in LIST_SECTIONS:
                 if ":" not in item:
-                    raise SpecError(f"line {n}: a record must start with `alias: <name>`")
+                    raise SpecError(
+                        f"line {n}: a {section[:-1]} must start with `alias: <name>`"
+                    )
                 current = {}
-                records.append(current)
+                lists[section].append(current)
                 nested = None
                 rec_indent = indent + 2
                 k, _, v = item.partition(":")
@@ -143,10 +147,11 @@ def parse(text: str) -> dict:
                 nested = {}
                 current[key] = nested
             else:
-                if key not in RECORD_KEYS:
+                allowed = LOOKUP_KEYS if section == "lookups" else RECORD_KEYS
+                if key not in allowed:
                     raise SpecError(
-                        f"line {n}: {key!r} is not a record key; allowed: "
-                        + ", ".join(sorted(RECORD_KEYS))
+                        f"line {n}: {key!r} is not a {section[:-1]} key; allowed: "
+                        + ", ".join(sorted(allowed))
                     )
                 current[key] = _scalar(value, n)
                 nested = None
@@ -165,7 +170,7 @@ def parse(text: str) -> dict:
         nested = None
         if not value:
             section = key
-            doc[key] = {} if key != "records" else records
+            doc[key] = lists[key] if key in LIST_SECTIONS else {}
         elif value == ">":
             section = key
             doc[key] = ""
@@ -174,7 +179,8 @@ def parse(text: str) -> dict:
             section = key
             doc[key] = _scalar(value, n)
 
-    doc["records"] = records
+    for name in LIST_SECTIONS:
+        doc[name] = lists[name]
     return doc
 
 
@@ -208,6 +214,35 @@ def marking_tier(describe_dir: Path | None, obj: str) -> tuple[str, list[str]]:
 
 # --------------------------------------------------------------- checking ---
 
+def key_stability(describe_dir: Path | None, obj: str, where: dict) -> tuple[str, list[str]]:
+    """Is this `where` clause keyed on something the platform keeps unique?
+
+    Returns (verdict, problems). A key that is unique and idLookup resolves to the same
+    record tomorrow. Anything else resolves today and carries no such promise, which is
+    the common case: Product2.ProductCode is neither unique nor idLookup.
+    """
+    if describe_dir is None:
+        return ("unknown", [])
+    path = describe_dir / f"{obj}.json"
+    if not path.exists():
+        return ("unknown", [])
+    import json
+    fields = {f["name"]: f for f in json.loads(path.read_text(encoding="utf-8")).get("fields", [])}
+    problems = []
+    for name in where:
+        f = fields.get(name)
+        if f is None:
+            problems.append(f"{obj} has no field {name!r}")
+        elif not f.get("filterable"):
+            problems.append(f"{obj}.{name} is not filterable, so it cannot key a lookup")
+    if problems:
+        return ("invalid", problems)
+    stable = any(
+        fields[n].get("unique") and fields[n].get("idLookup") for n in where if n in fields
+    )
+    return ("stable" if stable else "soft", [])
+
+
 def check(doc: dict, describe_dir: Path | None) -> tuple[list[str], list[str], list[dict]]:
     errors: list[str] = []
     warnings: list[str] = []
@@ -231,6 +266,57 @@ def check(doc: dict, describe_dir: Path | None) -> tuple[list[str], list[str], l
     if not records:
         errors.append("the spec creates no records")
 
+    # Lookups name records that already exist. They are resolved by query at preview,
+    # are referenced like anything else, and are never written to.
+    lookups: dict[str, dict] = {}
+    for i, lk in enumerate(doc.get("lookups") or [], start=1):
+        where = f"lookup {i}"
+        alias = lk.get("alias")
+        if not alias:
+            errors.append(f"{where}: no alias")
+            continue
+        where = f"lookup {i} ({alias})"
+        if not ALIAS.match(str(alias)):
+            errors.append(f"{where}: alias must match {ALIAS.pattern}")
+        if alias in lookups:
+            errors.append(f"{where}: alias is already used")
+        lookups[alias] = lk
+        obj = lk.get("object")
+        if not obj:
+            errors.append(f"{where}: no object")
+        extra = set(lk) - LOOKUP_KEYS
+        if extra:
+            errors.append(f"{where}: unknown key(s) {', '.join(sorted(extra))}")
+        clause = lk.get("where")
+        if not isinstance(clause, dict) or not clause:
+            errors.append(
+                f"{where}: no `where:` clause. A lookup identifies an existing record by a "
+                "stable key, never by Id."
+            )
+            continue
+        faulty = False
+        for value in clause.values():
+            if isinstance(value, str) and SALESFORCE_ID.match(value):
+                faulty = True
+                errors.append(
+                    f"{where}: the `where:` clause matches on what looks like an Id. "
+                    "A lookup exists so a spec can move between orgs; keying it on an Id "
+                    "pins it to one."
+                )
+        if obj:
+            verdict, problems = key_stability(describe_dir, obj, clause)
+            for problem in problems:
+                errors.append(f"{where}: {problem}")
+            # Only warn about key strength on a lookup that is otherwise sound; a
+            # second line about a clause already rejected is noise.
+            if verdict == "soft" and not problems and not faulty:
+                warnings.append(
+                    f"{where}: {obj} has no unique, idLookup field among "
+                    f"{', '.join(sorted(clause))}, so this key is not enforced unique. "
+                    "Preview fails if it matches other than exactly one record; apply pins "
+                    "the resolved Id in the log so verify and teardown never re-resolve."
+                )
+
     seen: dict[str, dict] = {}
     for i, rec in enumerate(records, start=1):
         where = f"record {i}"
@@ -241,7 +327,7 @@ def check(doc: dict, describe_dir: Path | None) -> tuple[list[str], list[str], l
         where = f"record {i} ({alias})"
         if not ALIAS.match(str(alias)):
             errors.append(f"{where}: alias must match {ALIAS.pattern}")
-        if alias in seen:
+        if alias in seen or alias in lookups:
             errors.append(f"{where}: alias is already used")
         seen[alias] = rec
         if not rec.get("object"):
@@ -261,19 +347,19 @@ def check(doc: dict, describe_dir: Path | None) -> tuple[list[str], list[str], l
                 continue
             m = REFERENCE.match(value)
             if m:
-                if m.group(1) not in seen:
+                if m.group(1) not in seen and m.group(1) not in lookups:
                     errors.append(
                         f"{where}: field {fname} references @{m.group(1)}, "
-                        "which no record declares"
+                        "which no record or lookup declares"
                     )
                 continue
             if value.startswith("@"):
                 errors.append(f"{where}: field {fname} has a malformed reference {value!r}")
             elif fname.endswith("Id") and SALESFORCE_ID.match(value):
                 warnings.append(
-                    f"{where}: field {fname} looks like a literal Salesforce Id. A spec "
-                    "addresses records it creates by @alias; a literal Id is a record "
-                    "this run does not own."
+                    f"{where}: field {fname} is a literal Salesforce Id, which pins this "
+                    "spec to one org. Declare the record under `lookups:` with a stable "
+                    "key and reference it as @alias instead."
                 )
 
         tier, keys = marking_tier(describe_dir, obj)
@@ -282,7 +368,16 @@ def check(doc: dict, describe_dir: Path | None) -> tuple[list[str], list[str], l
         marked_by = rec.get("marked_by")
 
         if marked_by and marked_by not in seen:
-            errors.append(f"{where}: marked_by names @{marked_by}, which no record declares")
+            if marked_by in lookups:
+                errors.append(
+                    f"{where}: marked_by names @{marked_by}, which is a lookup. Authorship "
+                    "can only be inherited from a record this run creates; a pre-existing "
+                    "record carries no marker of ours."
+                )
+            else:
+                errors.append(
+                    f"{where}: marked_by names @{marked_by}, which no record declares"
+                )
 
         if tier == "1":
             if not declared_key:
@@ -392,7 +487,20 @@ def main() -> int:
     print(f"spec    : {args.spec}")
     print(f"org     : {alias}")
     print(f"marker  : {marker.get('token') if isinstance(marker, dict) else None}")
+    lookups = doc.get("lookups") or []
+    print(f"lookups : {len(lookups)}")
     print(f"records : {len(records)}")
+
+    if lookups and not errors:
+        print()
+        print("Resolve first (read-only; preview fails unless each matches exactly one):")
+        for lk in lookups:
+            clause = lk.get("where") or {}
+            verdict, _ = key_stability(describe_dir, lk.get("object", ""), clause)
+            terms = ", ".join(f"{k} = {v!r}" for k, v in clause.items())
+            print(f"       {lk.get('object', '?'):<30s} @{lk.get('alias', '?'):<22s} "
+                  f"[{verdict} key]")
+            print(f"       {'':30s} where {terms}")
 
     if planned and not errors:
         print()
@@ -402,9 +510,13 @@ def main() -> int:
             route = {"1": "key", "2": "Name", "3": "marked_by"}.get(tier, "?")
             print(f"  {i:3d}. {rec['object']:<30s} @{rec['alias']:<22s} marked by {route}")
             for fname, value in (rec.get("fields") or {}).items():
-                shown = f"-> @{REFERENCE.match(value).group(1)}" if (
-                    isinstance(value, str) and REFERENCE.match(value)
-                ) else repr(value)
+                shown = repr(value)
+                if isinstance(value, str) and REFERENCE.match(value):
+                    ref = REFERENCE.match(value).group(1)
+                    kind = "lookup" if any(
+                        lk.get("alias") == ref for lk in lookups
+                    ) else "new"
+                    shown = f"-> @{ref} ({kind})"
                 print(f"       {fname:28s} {shown}")
 
     print()
@@ -415,7 +527,9 @@ def main() -> int:
     print()
     print(f"[{'FAIL' if errors else 'ok'}] {len(errors)} error(s), {len(warnings)} warning(s)")
     if not errors:
-        print("Valid. This checked the spec, not the org: preview against the org before apply.")
+        print("Valid. This checked the spec, not the org. Preview against the org before")
+    print("apply: lookups must each resolve to exactly one record, and nothing the spec")
+    print("creates may exist already.")
     return 1 if errors else 0
 
 

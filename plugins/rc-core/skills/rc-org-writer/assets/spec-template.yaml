@@ -1,18 +1,19 @@
 # rc-org-writer spec. Declares what must exist in an org; it is the single input
 # to preview, apply, verify and teardown.
 #
-# Constrained YAML subset: mappings, one nested level, a list of mappings under
-# `records`, scalars, and `>` for the purpose block. No anchors, no aliases, no
-# flow style. validate_spec.py errors on anything else rather than guessing.
+# Constrained YAML subset: mappings, one nested level, lists of mappings under
+# `lookups` and `records`, scalars, and `>` for the purpose block. No anchors, no
+# aliases, no flow style. validate_spec.py errors on anything else rather than
+# guessing.
 
 spec: rc-org-writer/v1
 
 target:
   org: <target-org-alias>
-  modules: salesforce_pricing
+  modules: product_catalog_management
 
 author: <who is accountable for this run>
-created: '2026-11-25'
+created: '2026-11-26'
 
 purpose: >
   One or two sentences on why these records should exist and what a reader is
@@ -23,41 +24,63 @@ marker:
   # Every record this spec creates carries this token, so a later teardown can
   # prove authorship without trusting the log alone. Pick something no catalog
   # value would collide with: a reserved prefix, the date, and a short suffix.
-  token: RCW-20261125-A
+  token: RCW-20261126-A
+
+# Records that already exist and are only referenced. Resolved by query during
+# preview, never created, never modified, never deleted, never in the log.
+# Each must match exactly one record or the preview fails and nothing is written.
+lookups:
+
+  # A soft key: Product2 has no unique, idLookup field, so ProductCode resolving
+  # to one record today is not a promise it will tomorrow. Apply pins the
+  # resolved Id in the log so verify and teardown never re-resolve.
+  - alias: platform_bundle
+    object: Product2
+    where:
+      ProductCode: PLAT-BUNDLE
+
+  - alias: support_addon
+    object: Product2
+    where:
+      ProductCode: SUP-ADDON
+
+  # A stable key: Code is unique and idLookup on ProductRelationshipType, so this
+  # resolves to the same record in any org that has it.
+  - alias: bundle_to_component
+    object: ProductRelationshipType
+    where:
+      GlobalKey: standard-bundle-component
 
 records:
 
   # Tier 1 -- the object has a unique, idLookup field. Declare it as `key` and
   # apply upserts on it, which makes a second run a no-op rather than a duplicate.
-  - alias: sched
-    object: PriceAdjustmentSchedule
-    key: GlobalKey
+  - alias: support_group
+    object: ProductComponentGroup
+    key: Code
     fields:
-      Name: RCW-20261125-A volume policy
-      GlobalKey: RCW-20261125-A-sched
-      ScheduleType: Volume
-      AdjustmentMethod: Range
-      IsActive: true
+      Name: RCW-20261126-A Support
+      Code: RCW-20261126-A-support
+      ParentProductId: '@platform_bundle'
+      MinBundleComponents: 0
+      MaxBundleComponents: 1
+      Sequence: 1
 
   # Tier 3 -- the object's Name is autonumbered, so no marker fits on the record.
   # `marked_by` names a record in this spec that can carry one, and whose lookup
   # from here is required and create-only. Authorship is then inherited and
-  # cannot be reassigned.
-  - alias: tier_low
-    object: PriceAdjustmentTier
-    marked_by: sched
+  # cannot be reassigned. It may never name a lookup: a pre-existing record
+  # carries no marker of ours.
+  - alias: support_component
+    object: ProductRelatedComponent
+    marked_by: support_group
     fields:
-      PriceAdjustmentScheduleId: '@sched'
-      LowerBound: 100
-      UpperBound: 250
-      TierType: AdjustmentPercentage
-      TierValue: 5
-
-  - alias: tier_high
-    object: PriceAdjustmentTier
-    marked_by: sched
-    fields:
-      PriceAdjustmentScheduleId: '@sched'
-      LowerBound: 250
-      TierType: AdjustmentPercentage
-      TierValue: 10
+      ParentProductId: '@platform_bundle'
+      ChildProductId: '@support_addon'
+      ProductComponentGroupId: '@support_group'
+      ProductRelationshipTypeId: '@bundle_to_component'
+      IsComponentRequired: false
+      IsDefaultComponent: false
+      IsQuantityEditable: true
+      DoesBundlePriceIncludeChild: false
+      Sequence: 1
