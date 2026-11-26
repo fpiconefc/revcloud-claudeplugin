@@ -6,3 +6,5 @@ __pycache__/
 # It is machine-generated, org-specific, and can contain customer configuration.
 knowledge/
 *.describe.json
+specs/
+applied/
