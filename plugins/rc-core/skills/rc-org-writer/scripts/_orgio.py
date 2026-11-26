@@ -51,18 +51,40 @@ def _run(args: list[str]) -> dict:
         raise OrgError(f"non-JSON reply: {out[:300]}")
 
 
+def _errors(node) -> list[str]:
+    """Pull Salesforce's own error sentences out of whatever shape they arrived in.
+
+    These sentences are the documentation for rules no describe expresses, so they
+    are worth surfacing verbatim rather than burying in an HTTP envelope.
+    """
+    found: list[str] = []
+    if isinstance(node, list):
+        for item in node:
+            found.extend(_errors(item))
+    elif isinstance(node, dict):
+        message = node.get("message")
+        if isinstance(message, str):
+            code = node.get("errorCode")
+            fields = node.get("fields")
+            text = message
+            if code and code not in message:
+                text = f"{code}: {message}"
+            if fields:
+                text += f" (fields: {', '.join(fields)})"
+            found.append(text)
+        for key in ("body", "result", "data", "errors"):
+            if key in node:
+                found.extend(_errors(node[key]))
+    return found
+
+
 def _message(payload: dict) -> str:
     """The most useful error string the CLI gave us."""
-    for key in ("message", "name"):
-        if payload.get(key):
-            return str(payload[key])
-    result = payload.get("result")
-    if isinstance(result, list) and result:
-        first = result[0]
-        if isinstance(first, dict):
-            return str(first.get("message") or first.get("errorCode") or first)
-    if isinstance(result, dict):
-        return str(result.get("message") or result)
+    found = _errors(payload)
+    if found:
+        return " | ".join(dict.fromkeys(found))
+    if isinstance(payload.get("name"), str):
+        return payload["name"]
     return json.dumps(payload)[:300]
 
 
@@ -92,17 +114,21 @@ def create(org: str, version: str, obj: str, fields: dict) -> str:
         payload = _run([
             "sf", "api", "request", "rest",
             f"/services/data/v{version}/sobjects/{obj}",
-            "--method", "POST", "--body", body,
+            "--method", "POST", "--body", "@" + body,
             "--target-org", org, "--json",
         ])
     finally:
         Path(body).unlink(missing_ok=True)
 
-    result = payload.get("result", payload)
-    if isinstance(result, list) and result:
-        result = result[0]
-    if isinstance(result, dict) and result.get("id") and result.get("success") is not False:
-        return str(result["id"])
+    for node in (payload.get("result"), payload.get("body"), payload):
+        candidate = node
+        if isinstance(candidate, dict) and "body" in candidate:
+            candidate = candidate["body"]
+        if isinstance(candidate, list) and candidate:
+            candidate = candidate[0]
+        if (isinstance(candidate, dict) and candidate.get("id")
+                and candidate.get("success") is not False):
+            return str(candidate["id"])
     raise OrgError(_message(payload))
 
 
