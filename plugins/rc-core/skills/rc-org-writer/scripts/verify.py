@@ -31,48 +31,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _orgio as org_io  # noqa: E402
 from validate_spec import DEFAULT_PACK, SpecError, parse  # noqa: E402
 
-# Fields the platform populates on its own. Writing none of them, a verify pass
-# still sees them come back, so a literal comparison calls every one a
-# difference. Observed on one org, API v68; the five on PriceAdjustmentTier were
-# confirmed by a full apply/verify run.
-PROJECTED: dict[str, set[str]] = {
-    "PriceAdjustmentTier": {
-        "AdjustmentType", "ScheduleType", "SellingModelType",
-        "PricingTerm", "PricingTermUnit",
-    },
-    "ProductRelatedComponent": {
-        "ParentProductRole", "ChildProductRole", "UnitOfMeasureId",
-    },
-    "AttributeBasedAdjustment": {
-        "ScheduleType", "SellingModelType", "PricingTerm", "PricingTermUnit",
-        "AttributeCount", "AttributeAdjConditionsHash",
-    },
-    "BundleBasedAdjustment": {
-        "ScheduleType", "SellingModelType", "PricingTerm", "PricingTermUnit",
-    },
-}
-
-# Autonumbered names: present on the record, never set by a spec.
-AUTONUMBERED = {"Name"}
-
-
-def equivalent(sent, got) -> tuple[bool, str]:
-    """(equal, why). `why` names the normalisation when one applies."""
-    if sent == got:
-        return True, ""
-    if isinstance(sent, str) and isinstance(got, str) and org_io.same_instant(sent, got):
-        return True, "same instant, different offset notation"
-    if isinstance(sent, bool) or isinstance(got, bool):
-        return (bool(sent) == bool(got)), "boolean"
-    try:
-        if float(sent) == float(got):
-            return True, "numeric normalisation"
-    except (TypeError, ValueError):
-        pass
-    if str(sent).strip() == str(got).strip():
-        return True, "whitespace"
-    return False, ""
-
+# The comparison lives in _orgio so preview and verify cannot drift apart.
+PROJECTED = org_io.PROJECTED
+AUTONUMBERED = org_io.AUTONUMBERED
+equivalent = org_io.equivalent
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Compare created records against the spec.")

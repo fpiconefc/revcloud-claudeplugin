@@ -37,10 +37,9 @@ relationship types, selling models. That is its whole job.
 
 **It does not run transactions.** Place Sales Transaction, placing a quote, reading which
 adjustment landed on `QuoteLinePriceAdjustment` — none of that is here. Those belong to a
-testing skill that does not exist yet and will depend on this one for the configuration it
-exercises. The distinction is not pedantry: configuration DML is reversible by deleting
-records, while a transaction creates assets and billing schedules whose removal is a
-different problem this contract does not cover.
+testing skill that does not exist yet. The distinction is not pedantry: configuration DML is
+reversible by deleting records, while a transaction creates assets and billing schedules
+whose removal is a different problem this contract does not cover.
 
 The working target is a **demo org** with catalogs, selling models, components and billing
 schedules loaded and in use. The risk there is not breaking production; it is **dirtying or
@@ -161,8 +160,26 @@ idLookup on that object, that the marker token is present where it belongs, and 
 carries a literal Id unflagged.
 
 `--target-org` runs the half that only the org can answer: **every lookup must resolve to
-exactly one record**, and **nothing the spec creates may exist already**. A hit on either
-stops the run.
+exactly one record**, and **every record the spec would create is classified into one of
+three states**, not two.
+
+| State | What preview does |
+|---|---|
+| does not exist | nothing to say; apply will create it |
+| exists and **matches** field for field | reports a **no-op**, exits 0, writes nothing |
+| exists and **differs** | **stops**, naming every differing field with both values |
+
+Query-then-compare: it only reads, so it never writes over a record the run does not own and
+the ownership rule keeps all its force. It is also why there is no upsert — the third state
+is exactly what an upsert would silently overwrite. The comparison is `verify.py`'s, applied
+before a create instead of after, and both import it from `_orgio.py` so that "does this
+match the spec" cannot come to mean two things.
+
+**The no-op is only available where a record has a unique key**, and **it is not idempotency
+in the strong sense**: it says the state matches now, not that this run produced it. A spec
+mixing keyed and unkeyed records is stopped rather than waved through, because apply creates
+unconditionally and would duplicate the unkeyed ones. `references/marking-and-idempotency.md`
+works through both points.
 
 Without `--target-org` it degrades to the offline checks and says so in as many words. That
 distinction is not academic: a spec whose lookup names a product that is not in the org
@@ -205,19 +222,16 @@ exactly the state teardown exists to prevent.
 
 **Append-and-flush narrows that window to one record; it does not close it.** Between a
 create returning an Id and the log line reaching disk, the record exists and the log does not
-know it, so a process killed exactly there leaves one orphan and the log is not complete
-authority. Irreducible without a transaction the platform does not offer, so the mitigation
-is procedural: after an interrupted apply, query the target object for the marker before
-re-running. It is one record, and the plan named which object.
+know it, so a kill exactly there leaves one orphan. Irreducible without a transaction the
+platform does not offer: after an interrupted apply, query the target object for the marker
+before re-running. It is one record, and the plan named which object.
 
-**If a create fails, apply stops**, and the first run of this cycle against a real org is why
-that is stated as a rule rather than assumed. Driven by hand, a failed create did not stop
-the sequence: the following creates ran anyway, and two log lines were written with an empty
-Id. A log that lies is worse than no log, because teardown believes it. So apply stops at the
-first error, and **writes no log line for a create that returned no Id**.
-
-It does not roll back what it already made: the log plus teardown is the rollback, and that is
-a separate, confirmed decision.
+**If a create fails, apply stops**, and the first hand-driven run is why that is a rule
+rather than an assumption: a failed create did not stop the sequence, the following creates
+ran anyway, and two log lines were written with an empty Id. A log that lies is worse than no
+log, because teardown believes it. Apply stops at the first error and **writes no log line
+for a create that returned no Id**. It does not roll back what it made — the log plus
+teardown is the rollback, and that is a separate, confirmed decision.
 
 ### 3. verify — read it back and compare
 
@@ -259,10 +273,10 @@ everything matching the marker, not everything in the object: the log is the aut
 because the log is the only thing that knows what this run made. `--dry-run` prints the list
 and stops.
 
-It is **idempotent over its own log**. A record already gone is reported as such and is not an
-error, so an interrupted teardown can simply be run again, and running the same log twice
-deletes nothing the second time. It also deduplicates on Id, because a log can carry the same
-record twice when a command block is pasted twice — which is how that was found.
+It is **idempotent over its own log**: a record already gone is reported as such, not as an
+error, so an interrupted teardown runs again cleanly and the same log twice deletes nothing
+the second time. It deduplicates on Id, because a log can carry one record twice when a
+command block is pasted twice — which is how that was found.
 
 Reverse order because the dependencies that forced the apply order still hold: a schedule
 cannot go while its tiers point at it.
@@ -348,10 +362,10 @@ These are half the value of this skill. Each one is a rule the cycle enforces, n
   written, and recorded in the log only as `kind: lookup`, which teardown skips.
 - **A lookup resolves to exactly one record or the preview fails.** Zero matches and two
   matches are both errors, and neither is negotiable at apply time.
-- **Applying twice cannot duplicate, by refusing rather than upserting.** `apply.py` inserts.
-  A second run is caught by preview's existence check, and if preview is skipped the unique
-  index refuses the insert. It is **not** a no-op: it stops with an error and writes no
-  `created` row (observed 2026-11-26).
+- **Applying twice cannot duplicate.** Preview classifies an existing record as a no-op or a
+  conflict and says which; if preview is skipped, `apply.py` inserts and the unique index
+  refuses it with `DUPLICATE_VALUE`, writing no `created` row (observed 2026-11-26). Apply
+  itself has no skip logic, which is why the three states are decided in preview.
 - **A true upsert is deliberately absent**, because its update branch would modify a record
   a different run created, which the ownership rule forbids. See
   `references/marking-and-idempotency.md`.
@@ -380,17 +394,15 @@ These are half the value of this skill. Each one is a rule the cycle enforces, n
 
 ## Without a shell
 
-claude.ai has no shell, and the Salesforce connector has `createSobjectRecord`,
-`updateSobjectRecord` and `deleteSobjectRecord`. So the whole cycle is executable from a chat
-session, which makes it **more** important that the guardrails live in this body and not only
-in a script: in that branch there is no script, and this text is the entire contract.
+claude.ai has no shell, and the connector has `createSobjectRecord`, `updateSobjectRecord`
+and `deleteSobjectRecord`, so the whole cycle is executable from a chat session. That makes
+it **more** important that the guardrails live in this body: there is no script in that
+branch, and this text is the entire contract. Run the four phases by hand, in order:
 
-Run the four phases by hand, in order:
-
-- **preview.** Reproduce the validator's offline checks with `getObjectSchema` per object
-  (`references/marking-and-idempotency.md` has the per-object answers worked out), then
-  `soqlQuery` each lookup to prove it resolves to exactly one, and each `key` to prove the
-  record does not exist yet. Show all of it before asking.
+- **preview.** Reproduce the offline checks with `getObjectSchema` per object
+  (`references/marking-and-idempotency.md` has the per-object answers), then `soqlQuery` each
+  lookup to prove it resolves to exactly one, and each `key` to classify the record into the
+  three states above — absent, matching, or differing. Show all of it before asking.
 - **apply.** `createSobjectRecord` in dependency order, after an explicit yes to that
   preview. **Write the log into the conversation as you go**, one line per record with the
   returned Id, immediately after each create. Stop at the first failure, and write no line
@@ -411,28 +423,13 @@ the ids somewhere durable before moving on.
 
 ## There is no update path, and that is deliberate
 
-Apply creates. Correction deletes and recreates. **The cycle has no phase that modifies a
-record, including one it created itself**, and the guardrail is absolute rather than a
-default with exceptions, because "update is fine when I am sure" is how a write cycle stops
-being reversible. A delete-and-recreate leaves the log the authority on what exists; an
-in-place edit leaves the log describing a record that no longer matches it.
-
-The create-only fields make this cheap most of the time — a tier's schedule lookup, every
-product lookup on a component, both role categories on a relationship type. Those could not
-be edited anyway.
-
-**The case that argues against the rule** is real: create a schedule inactive, load its
-tiers, then activate it so the configuration is never live half-built. That flip is an update
-to a record this run created, and the contract does not express it.
-
-**It is out of scope, and the same result is available.** Build the spec inactive, preview,
-apply, verify, then have a human activate the one field having read the verify output. That
-is a decision made with the evidence in hand rather than a step a script performs, which is
-the right shape for the moment a configuration goes live — note it in `purpose` so the next
-reader knows the spec alone does not leave the org finished.
-
-What this rules out is a spec that is a sequence of states. That needs a different contract,
-and inventing one inside a build skill is how the loosest standard wins.
+Apply creates; correction deletes and recreates. **No phase modifies a record, including one
+this run created**, and the rule is absolute rather than a default with exceptions, because
+"update is fine when I am sure" is how a cycle stops being reversible. The one case that
+argues against it — create a schedule inactive, load its tiers, then activate so the
+configuration is never live half-built — is out of scope: build it inactive, preview, apply,
+verify, and have a person flip the field having read the output.
+`references/marking-and-idempotency.md` has the reasoning.
 
 ## Verified anchors
 
@@ -461,20 +458,18 @@ Per-object detail, with the counts behind the tier table, in
   `Name` is `autoNumber: true, createable: false`, and a created record came back numbered.
 - **PLATFORM (v68, observed)** — teardown in reverse order succeeds, leaving the org as it
   was with referenced records untouched.
-- **PLATFORM (v68, observed)** — `PriceAdjustmentTier.EffectiveFrom` is `nillable: true` in
-  the describe and rejected when absent: *"Specify the Effective From date to save your price
-  adjustment tier."*
-- **PLATFORM (v68, observed)** — a `PriceAdjustmentTier` whose bounds overlap another under
-  the same schedule is refused: *"The tiers must have unique effective date ranges and lower
-  and upper bound value ranges."*
+- **PLATFORM (v68, observed)** — `PriceAdjustmentTier.EffectiveFrom` is `nillable: true`
+  and rejected when absent: *"Specify the Effective From date to save your price adjustment
+  tier."*
+- **PLATFORM (v68, observed)** — a tier whose bounds overlap another under the same
+  schedule is refused: *"The tiers must have unique effective date ranges and lower and upper
+  bound value ranges."*
 
 ## Not verified
 
-- **The cycle has been run once, by hand, on one org.** A `PriceAdjustmentSchedule` plus
-  three `PriceAdjustmentTier` rows, through preview, apply, verify and teardown. Everything
-  marked *observed* above comes from that run and has **not been replicated on a second org**,
-  so it is unvalidated under the pack's notes protocol. The scripts here were written from it
-  and have not themselves been run end to end.
+- **The cycle has been run on one org only.** Everything marked *observed* above comes from
+  those runs and has **not been replicated on a second org**, so it is unvalidated under the
+  pack's notes protocol.
 - **Upsert-on-key is still unproven.** The run showed that a *duplicate insert* on `GlobalKey`
   is refused by the platform's index, naming the colliding record. Re-running the same spec
   on 2026-11-26 stopped with `DUPLICATE_VALUE` and created nothing — no duplicate, and no
@@ -488,6 +483,11 @@ Per-object detail, with the counts behind the tier table, in
   is not known to be cleanly reversible.
 - **Whether tier-2 query-then-skip is adequate in practice.** The race is real in principle;
   how likely it is with one operator is a guess.
+- **Whether the no-op was tested against a record another run created.** It was exercised
+  against one the *same* spec had just applied — the easy case, since the values came from
+  one file. A record built by a different run, or edited by a person into a matching state,
+  was not tried. The conflict state was reached by editing the spec rather than the org:
+  the same comparison, different provenance.
 - **What the platform normalises, beyond what one run showed.** The datetime offset
   rewriting and the five projections on `PriceAdjustmentTier` were observed. The rest of the
   expected-difference list is still assembled from field metadata rather than from a verify

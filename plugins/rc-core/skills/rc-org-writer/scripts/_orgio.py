@@ -250,6 +250,54 @@ def _parse_dt(value):
     return parsed.astimezone(timezone.utc)
 
 
+# --------------------------------------------------- comparing to the org ---
+
+# Fields the platform populates on its own. A comparison that does not expect
+# them calls every one a difference. Observed on API v68; the five on
+# PriceAdjustmentTier were confirmed by a full apply/verify run.
+PROJECTED: dict[str, set[str]] = {
+    "PriceAdjustmentTier": {
+        "AdjustmentType", "ScheduleType", "SellingModelType",
+        "PricingTerm", "PricingTermUnit",
+    },
+    "ProductRelatedComponent": {
+        "ParentProductRole", "ChildProductRole", "UnitOfMeasureId",
+    },
+    "AttributeBasedAdjustment": {
+        "ScheduleType", "SellingModelType", "PricingTerm", "PricingTermUnit",
+        "AttributeCount", "AttributeAdjConditionsHash",
+    },
+    "BundleBasedAdjustment": {
+        "ScheduleType", "SellingModelType", "PricingTerm", "PricingTermUnit",
+    },
+}
+
+# Autonumbered names: present on the record, never set by a spec.
+AUTONUMBERED = {"Name"}
+
+
+def equivalent(sent, got) -> tuple[bool, str]:
+    """(equal, why). `why` names the normalisation when one applies.
+
+    Used by verify after a create and by preview before one, so that "does this
+    match the spec" has exactly one definition. Two copies would drift.
+    """
+    if sent == got:
+        return True, ""
+    if isinstance(sent, str) and isinstance(got, str) and same_instant(sent, got):
+        return True, "same instant, different offset notation"
+    if isinstance(sent, bool) or isinstance(got, bool):
+        return (bool(sent) == bool(got)), "boolean"
+    try:
+        if float(sent) == float(got):
+            return True, "numeric normalisation"
+    except (TypeError, ValueError):
+        pass
+    if str(sent).strip() == str(got).strip():
+        return True, "whitespace"
+    return False, ""
+
+
 def die(message: str) -> None:
     print(f"error: {message}", file=sys.stderr)
     raise SystemExit(1)

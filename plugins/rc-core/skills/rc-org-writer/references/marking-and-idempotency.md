@@ -183,6 +183,54 @@ and created nothing. So **a second run cannot duplicate, and it is an error rath
 no-op.** A caller wanting re-runnable behaviour tears down and re-applies, which is the same
 answer the cycle gives for correction.
 
+### What the no-op does and does not mean
+
+Preview classifies a record that already exists as a **no-op** when it matches the spec field
+for field, and as a **conflict** when it differs. Two limits on that, both of which belong in
+the caller's head.
+
+**It is only available where a record has a unique key.** Those are the tier-1 objects, and
+they are the only ones where "does this already exist?" has an answer that does not depend on
+the log. A tier-3 record carries nothing to find it by, so the log remains its sole authority
+and no no-op is possible for it.
+
+That asymmetry has a consequence a spec runs into immediately. A spec with a keyed parent and
+unkeyed children — a schedule and its tiers, a group and its components — cannot be
+half-skipped. If the parent is a no-op and the children cannot be checked, applying would
+create the children a second time, so preview stops instead of reporting a clean no-op. The
+fix is to tear the earlier run down from its log and re-apply, or to split the spec.
+
+**A no-op is not idempotency in the strong sense.** It says the state matches *now*. It does
+not say this run produced it, and it cannot: a record another run created, or one a person
+edited into a matching state, is indistinguishable from one this spec made. What the no-op
+buys is the knowledge that applying would change nothing — which is what the caller wanted
+to know, and is weaker than "this ran before".
+
+## Why there is no update path
+
+Apply creates. Correction deletes and recreates. **The cycle has no phase that modifies a
+record, including one it created itself**, and the guardrail is absolute rather than a
+default with exceptions, because "update is fine when I am sure" is how a write cycle stops
+being reversible. A delete-and-recreate leaves the log the authority on what exists; an
+in-place edit leaves the log describing a record that no longer matches it.
+
+The create-only fields make this cheap most of the time — a tier's schedule lookup, every
+product lookup on a component, both role categories on a relationship type. Those could not
+be edited anyway.
+
+**The case that argues against the rule** is real: create a schedule inactive, load its
+tiers, then activate it so the configuration is never live half-built. That flip is an update
+to a record this run created, and the contract does not express it.
+
+**It is out of scope, and the same result is available.** Build the spec inactive, preview,
+apply, verify, then have a human activate the one field having read the verify output. That
+is a decision made with the evidence in hand rather than a step a script performs, which is
+the right shape for the moment a configuration goes live — note it in `purpose` so the next
+reader knows the spec alone does not leave the org finished.
+
+What this rules out is a spec that is a sequence of states. That needs a different contract,
+and inventing one inside a build skill is how the loosest standard wins.
+
 ## Create-only fields make correction a delete
 
 A field that is createable and not updateable cannot be fixed in place. Known cases, all

@@ -474,6 +474,7 @@ def preview_against_org(doc: dict, org: str) -> tuple[list[str], list[str]]:
 
     errors: list[str] = []
     notes: list[str] = []
+    resolved: dict[str, str] = {}
     try:
         for lk in doc.get("lookups") or []:
             alias, obj = lk.get("alias"), lk.get("object")
@@ -483,6 +484,7 @@ def preview_against_org(doc: dict, org: str) -> tuple[list[str], list[str]]:
             where = " AND ".join(f"{k} = {soql_literal(v)}" for k, v in clause.items())
             rows = org_io.query(org, f"SELECT Id FROM {obj} WHERE {where} LIMIT 2")
             if len(rows) == 1:
+                resolved[alias] = rows[0]["Id"]
                 notes.append(f"lookup @{alias} resolves to {rows[0]['Id']}")
             else:
                 errors.append(
@@ -490,18 +492,77 @@ def preview_against_org(doc: dict, org: str) -> tuple[list[str], list[str]]:
                     f"({where})"
                 )
 
+        # A keyed record has three possible states, not two. Which one it is
+        # decides whether apply should run at all, and the distinction is made
+        # here, by reading -- apply itself still creates unconditionally.
+        keyed = unkeyed = 0
+        no_ops: list[str] = []
         for rec in doc.get("records") or []:
             alias, obj, key = rec.get("alias"), rec.get("object"), rec.get("key")
             fields = rec.get("fields") or {}
-            if not (alias and obj and key and key in fields):
+            if not (alias and obj):
                 continue
-            value = soql_literal(fields[key])
-            rows = org_io.query(org, f"SELECT Id FROM {obj} WHERE {key} = {value} LIMIT 2")
-            if rows:
+            if not (key and key in fields):
+                unkeyed += 1
+                continue
+            keyed += 1
+
+            comparable = {
+                name: resolved[value[1:]] if (
+                    isinstance(value, str) and value.startswith("@")
+                    and value[1:] in resolved
+                ) else value
+                for name, value in fields.items()
+                if not (isinstance(value, str) and value.startswith("@")
+                        and value[1:] not in resolved)
+            }
+            deferred = [n for n in fields if n not in comparable]
+            select = ", ".join(dict.fromkeys(["Id"] + list(comparable)))
+            rows = org_io.query(
+                org, f"SELECT {select} FROM {obj} WHERE {key} = {soql_literal(fields[key])} LIMIT 2"
+            )
+            if not rows:
+                continue  # state 1: does not exist, apply will create it
+
+            row = rows[0]
+            differs: list[str] = []
+            for name, want in comparable.items():
+                equal, _why = org_io.equivalent(want, row.get(name))
+                if not equal:
+                    differs.append(f"{name}: spec {want!r}, org {row.get(name)!r}")
+
+            if differs:
+                # State 3: someone changed it. A spec cannot correct this,
+                # because the cycle has no update.
                 errors.append(
-                    f"record @{alias}: a {obj} with {key} = {fields[key]!r} already "
-                    f"exists ({rows[0]['Id']}). This run did not create it, so it is "
-                    "not ours to overwrite."
+                    f"record @{alias}: a {obj} with {key} = {fields[key]!r} already exists "
+                    f"({row['Id']}) and **differs** from the spec in "
+                    f"{len(differs)} field(s): " + "; ".join(differs) +
+                    ". This run did not create it, and there is no update phase, so the "
+                    "correction is a teardown of whatever created it followed by a "
+                    "re-apply -- a decision for a person, not for this run."
+                )
+            else:
+                # State 2: the desired state is already present.
+                note = f"@{alias}: {obj} {row['Id']} already matches the spec (no-op)"
+                if deferred:
+                    note += f"; not compared: {', '.join(deferred)}"
+                no_ops.append(note)
+                notes.append(note)
+
+        if no_ops and not errors:
+            if unkeyed:
+                errors.append(
+                    f"{len(no_ops)} record(s) already match the spec, but {unkeyed} record(s) "
+                    "in this spec carry no unique key and cannot be checked. Apply creates "
+                    "unconditionally, so running it would duplicate those. Tear down the "
+                    "earlier run from its log and re-apply, or split the spec."
+                )
+            elif len(no_ops) == keyed:
+                notes.append(
+                    "NOTHING TO DO: every record this spec declares already exists and "
+                    "matches it. Do not run apply; it creates unconditionally and would "
+                    "fail on the unique key."
                 )
     except org_io.OrgError as exc:
         errors.append(f"could not preview against the org: {exc}")
@@ -596,9 +657,14 @@ def main() -> int:
     if errors:
         return 1
     if args.target_org:
-        print(f"Valid, and previewed against {args.target_org}: every lookup resolves to")
-        print("exactly one record, and nothing the spec creates exists yet. The org can")
-        print("still refuse a create for a rule no describe expresses; apply reports it.")
+        if any("NOTHING TO DO" in n for n in org_notes):
+            print(f"Previewed against {args.target_org}: the desired state is already in")
+            print("place. Nothing to apply.")
+        else:
+            print(f"Valid, and previewed against {args.target_org}: every lookup resolves to")
+            print("exactly one record, and nothing the spec creates exists yet in a form")
+            print("that conflicts. The org can still refuse a create for a rule no describe")
+            print("expresses; apply reports it.")
     else:
         print("Valid OFFLINE ONLY. The spec is well formed, but the org was not consulted,")
         print("so a lookup resolving to nothing and a record that already exists would both")
