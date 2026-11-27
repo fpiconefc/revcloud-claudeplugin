@@ -169,25 +169,36 @@ three states**, not two.
 | exists and **matches** field for field | reports a **no-op**, exits 0, writes nothing |
 | exists and **differs** | **stops**, naming every differing field with both values |
 
-Query-then-compare: it only reads, so it never writes over a record the run does not own and
-the ownership rule keeps all its force. It is also why there is no upsert — the third state
-is exactly what an upsert would silently overwrite. The comparison is `verify.py`'s, applied
-before a create instead of after, and both import it from `_orgio.py` so that "does this
-match the spec" cannot come to mean two things.
+Query-then-compare: it only reads, so it never writes over a record the run does not own, and
+the third state is exactly what an upsert would have overwritten silently. The comparison is
+`verify.py`'s applied before a create instead of after, imported from `_orgio.py` by both.
 
-**The no-op is only available where a record has a unique key**, and **it is not idempotency
-in the strong sense**: it says the state matches now, not that this run produced it. A spec
-mixing keyed and unkeyed records is stopped rather than waved through, because apply creates
-unconditionally and would duplicate the unkeyed ones. `references/marking-and-idempotency.md`
-works through both points.
+#### Can a spec be re-applied?
 
-Without `--target-org` it degrades to the offline checks and says so in as many words. That
-distinction is not academic: a spec whose lookup names a product that is not in the org
-passes every offline check and fails at apply. The offline pass tells you the spec is well
-formed, nothing more.
+**For most specs, no, and the correction is still teardown then re-apply.** The reason is the
+shape, not an edge case.
 
-Preview is the only phase a reader can review, so its output is the artifact to put in front
-of someone.
+A build skill generates **a keyed parent with unkeyed children**: a schedule and its tiers, a
+group and its components. The parent can be classified; the children carry nothing to find
+them by — tier 3, where the log is the only authority — so they cannot be, and apply
+would create them a second time.
+
+Preview therefore stops on that mixture rather than reporting a clean no-op. **What the three
+states buy for a mixed spec is a legible error naming the situation, in place of a
+`DUPLICATE_VALUE` from the platform's index** — worth having, and a different thing from
+being re-appliable.
+
+The no-op is a real answer only for a spec whose records are **all** keyed, in practice a
+small spec of parents, and even then it is **not idempotency in the strong sense**: it says
+the state matches now, not that this run produced it.
+`references/marking-and-idempotency.md` works through both limits.
+
+Without `--target-org` it degrades to the offline checks and says so. That is not academic:
+a spec whose lookup names a product the org lacks passes every offline check and fails at
+apply. The offline pass says the spec is well formed, nothing more.
+
+Preview is the only phase a reader can review, so its output is what to put in front of
+someone.
 
 ### 2. apply — only after explicit confirmation
 
@@ -349,48 +360,40 @@ products the most dangerous thing a spec can create in a loaded catalog.
 
 ## Guardrails
 
-These are half the value of this skill. Each one is a rule the cycle enforces, not advice.
+Half the value of this skill, and each a rule the cycle enforces rather than advice.
 
-- **Preview before apply, always.** There is no path that writes without a preview a human
-  has read.
-- **Confirmation is per preview.** Editing the spec voids it. Approval to write once is not
-  approval to write again.
-- **Never modify or delete a record this run did not create.** If the spec asks to create
-  something that already exists, preview reports it and stops. It does not assume it may
-  overwrite. This is the rule that protects demo material, and it has no exceptions. A record
-  reached through `lookups` is the same rule seen from the other side: referenced, never
-  written, and recorded in the log only as `kind: lookup`, which teardown skips.
-- **A lookup resolves to exactly one record or the preview fails.** Zero matches and two
-  matches are both errors, and neither is negotiable at apply time.
-- **Applying twice cannot duplicate.** Preview classifies an existing record as a no-op or a
-  conflict and says which; if preview is skipped, `apply.py` inserts and the unique index
-  refuses it with `DUPLICATE_VALUE`, writing no `created` row (observed 2026-11-26). Apply
-  itself has no skip logic, which is why the three states are decided in preview.
+- **Preview before apply, always.** No path writes without a preview a human has read, and
+  **confirmation is per preview** — editing the spec voids it.
+- **Never modify or delete a record this run did not create.** Preview reports and stops; it
+  never assumes it may overwrite. This protects demo material and has no exceptions. A record
+  reached through `lookups` is the same rule from the other side: referenced, never written,
+  logged only as `kind: lookup`, which teardown skips.
+- **A lookup resolves to exactly one record or preview fails**; zero and two are both errors.
+- **Applying twice cannot duplicate, and a mixed spec cannot be re-applied at all.** Preview
+  classifies a keyed record as a no-op or a conflict; unkeyed children cannot be classified,
+  so a spec holding both is stopped and the correction stays teardown then re-apply. Skip
+  preview and the unique index refuses the insert with `DUPLICATE_VALUE`, writing no
+  `created` row.
 - **A true upsert is deliberately absent**, because its update branch would modify a record
   a different run created, which the ownership rule forbids. See
   `references/marking-and-idempotency.md`.
-- **Some objects are stronger than their marking tier suggests, within a narrow scope.**
-  `PriceAdjustmentTier` is tier 3 and has no marker, yet the platform refuses a tier whose
-  range overlaps another under the same schedule: *"The tiers must have unique effective date
-  ranges and lower and upper bound value ranges."* So **re-applying an identical tier spec
-  cannot duplicate, and the platform guarantees it rather than the cycle.** The scope is
-  exactly that: tiers with different ranges coexist happily, so this is not general
+- **Some objects are stronger than their tier suggests, in a narrow scope.**
+  `PriceAdjustmentTier` has no marker, yet the platform refuses a tier overlapping another
+  under the same schedule, so an identical tier spec cannot duplicate — guaranteed by the
+  platform, not the cycle. Tiers with different ranges coexist, so this is not general
   idempotency and must not be quoted as such.
 - **Nothing is ever updated, including a record this run created.** There is no update phase;
   see above for the inactive-then-activate case and how it is handled outside the cycle.
-- **Correction is delete-and-recreate, as the normal case.** Create-only fields are everywhere
-  in this model: `PriceAdjustmentTier.PriceAdjustmentScheduleId`, every product lookup on
-  `ProductRelatedComponent` and `BundleBasedAdjustment`, both role categories on
-  `ProductRelationshipType`. A spec whose correction path assumes `update` works is wrong
-  about the platform, not unlucky.
-- **Never set a read-only field.** The selling-model projection on `PriceAdjustmentTier`,
-  `ParentProductRole` and `ChildProductRole` on `ProductRelatedComponent`. Verify must expect
-  the platform to fill them.
+- **Correction is delete-and-recreate, as the normal case.** Create-only fields are
+  everywhere here — a tier's schedule lookup, every product lookup on a component or bundle
+  adjustment, both role categories on a relationship type. A correction path that assumes
+  `update` works is wrong about the platform, not unlucky.
+- **Never set a read-only field**, such as a tier's selling-model projection or a
+  component's roles. Verify expects the platform to fill them.
 - **Teardown deletes from the log, never from a query.** "Everything matching the marker"
-  would catch a record someone else created with the same prefix.
-- **No catalog content invented into a demo org without saying so.** A spec that adds products
-  to a live demo catalog is a change to someone's demo, whatever the marker says.
-- **This skill does not run transactions.** See **Scope** above.
+  would catch a record someone else made with the same prefix.
+- **No catalog content invented into a demo org without saying so**, and **no transactions**
+  — see **Scope** above.
 
 ## Without a shell
 
@@ -452,8 +455,8 @@ Per-object detail, with the counts behind the tier table, in
 - **DOCS** — `AttributeAdjustmentCondition`'s supported calls omit `delete()` and
   `undelete()`, while `AttributeBasedAdjRule` has both. (Salesforce Pricing)
 - **PLATFORM (v68, observed)** — `GlobalKey` is writable and genuinely unique: a duplicate
-  insert was refused by the platform's own index, naming the colliding record, not by an RCA
-  validation rule. See **Not verified** for what that does and does not prove.
+  insert is refused by the platform's own index, naming the colliding record, not by an RCA
+  validation rule.
 - **PLATFORM (v68, observed)** — `PriceAdjustmentTier` is tier 3 as its metadata says: its
   `Name` is `autoNumber: true, createable: false`, and a created record came back numbered.
 - **PLATFORM (v68, observed)** — teardown in reverse order succeeds, leaving the org as it
@@ -488,11 +491,9 @@ Per-object detail, with the counts behind the tier table, in
   one file. A record built by a different run, or edited by a person into a matching state,
   was not tried. The conflict state was reached by editing the spec rather than the org:
   the same comparison, different provenance.
-- **What the platform normalises, beyond what one run showed.** The datetime offset
-  rewriting and the five projections on `PriceAdjustmentTier` were observed. The rest of the
-  expected-difference list is still assembled from field metadata rather than from a verify
-  pass that produced it, so treat the list as a starting point and add to it as runs reveal
-  more.
+- **What the platform normalises, beyond what these runs showed.** The datetime rewriting
+  and the five tier projections were observed; the rest of the expected-difference list is
+  assembled from field metadata. Treat it as a starting point and add to it.
 - **The 17/22/70 split counts the objects this pack seeds**, four on org-local custom fields.
   Another org splits differently, which is why the validator reads the target org's describes.
 
@@ -500,7 +501,6 @@ Per-object detail, with the counts behind the tier table, in
 
 Declare `writes: true`, say in your description that you write to an org, and name your
 preview, confirmation and teardown in your body. Do not re-implement the cycle: emit a spec
-and run it through these scripts. A build skill's job is knowing *what* should exist —
-domain doctrine, in `rc-catalog-selling-models`, `rc-pricing-adjustments` and `rc-bundles`.
-Knowing how to put it there safely is this skill's job, and there should be one answer to
-that in the repository.
+and run it through these scripts. A build skill's job is knowing *what* should exist, which
+is domain doctrine; knowing how to put it there safely is this skill's job, and there should
+be one answer to that in the repository.

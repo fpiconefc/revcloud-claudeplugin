@@ -169,6 +169,23 @@ expected differences on every tier — five fields the platform projects from th
 the selling model, an autonumbered `Name`, and `EffectiveFrom` returned in a different offset
 notation. Those are documented in `rc-org-writer`; none of them is a finding.
 
+### Can a pricing spec be re-applied?
+
+**No. Re-run it and the correction is teardown then re-apply.**
+
+A pricing spec is a keyed schedule with unkeyed tiers, which is the shape that cannot be
+re-applied: the schedule carries a `GlobalKey` and can be recognised, the tiers carry nothing
+to find them by, so applying again would create a second set of tiers under a schedule that
+already exists. Preview stops rather than letting that happen.
+
+What it gives you is **a readable error naming the situation instead of a `DUPLICATE_VALUE`
+from the platform's unique index**. That is worth having and it is not the same as the spec
+being re-appliable — do not read one as the other. To load a corrected policy: tear the
+previous run down from its log, edit the spec, and apply it again.
+
+The exception is a spec of schedules alone, with no tiers. There every record is keyed, so
+preview can report a genuine no-op and exit 0. That is rarely the shape a pricing load takes.
+
 **In a chat session with no shell**, `rc-org-writer`'s "Without a shell" section has the
 connector equivalent of each phase. The pricing checks above are queries you run by hand
 there: the tier bounds and `EffectiveFrom` are read off the spec, and the selling-model
@@ -242,11 +259,9 @@ Those are different claims and the gap between them is where a pricing bug lives
   falls between a 100–250 tier and a 251–500 tier, and **the gap cannot be closed**, because
   the configuration that would cover it is the one the platform rejects. If a product is
   fractionally quantified, settle this before designing tiers on it.
-- **Re-applying the same spec fails rather than being a no-op.** The second run stops with
-  `DUPLICATE_VALUE` on the schedule's `GlobalKey` and creates nothing, which is correct and
-  safe. But a skill that generates re-appliable specs will meet this constantly, and the
-  answer within the contract is teardown then re-apply, not upsert —
-  `rc-org-writer` explains why upsert would break its ownership rule.
+- **Whether a tier that already exists is ever reported as a no-op rather than stopping the
+  run.** It cannot be today, since tiers carry no key; if a future spec shape gives them one,
+  the three states would apply to them too and this answer changes.
 - **How two active schedules of the same type over one price book interact.** The reason
   schedules are created inactive, and not something this pack can settle without a
   transaction.
