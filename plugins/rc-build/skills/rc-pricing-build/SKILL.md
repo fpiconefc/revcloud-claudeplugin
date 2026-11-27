@@ -224,6 +224,15 @@ Those are different claims and the gap between them is where a pricing bug lives
 - **DOCS** — the guide documents `UpperBound` as not inclusive and instructs setting it one
   higher than the intended quantity. The platform contradicts this; see
   `rc-pricing-adjustments` Trap 1.
+- **PLATFORM (v68, observed 2026-11-27)** — `assets/example-spec.yaml` runs clean through
+  all four phases with its placeholders filled in: pre-flight and preview pass, apply creates
+  the schedule and three tiers, verify reports 27 matches and 22 expected differences with
+  **zero unexpected**, and teardown removes all four. The tiers persist with their stepped
+  bounds intact — 100–250, 251–500, 501 open — and the schedule persists inactive.
+  Existence before teardown and absence after were both confirmed **by querying the org**,
+  not by reading the scripts' output: that distinction is what caught a teardown reporting
+  deletions it had not performed. The org returned to its exact prior counts, and the
+  referenced product's selling-model options were untouched throughout.
 
 ## Not verified
 
@@ -244,11 +253,9 @@ Those are different claims and the gap between them is where a pricing bug lives
 - **These rules were observed on one org, on one API version**, and are not replicated. They
   are platform behaviour rather than configuration, so they should travel; confirm on a
   second org before treating them as settled everywhere.
-- **The example spec has been previewed, not applied.** Its pre-flight and preview both pass
-  against a real org with the placeholders filled in, which proves the lookups resolve and
-  the shape is accepted. A spec of the same shape — one schedule plus three tiers, reached
-  through lookups — was taken through apply, verify and teardown end to end while this pack
-  was built, so the cycle is exercised; this particular file's apply is not.
+- **The example spec is not unverified** — it was taken through all four phases on API
+  v68, and what remains unverified about it is only what a second org would settle. See
+  **Verified anchors**.
 
 ## Guardrails
 
