@@ -1,0 +1,103 @@
+# A complete, small bundle spec: one group and two components on products that
+# already exist. The shape is finished; four values are placeholders you replace
+# with the target org's own identifiers before running.
+#
+#   <target-org-alias>   the org you are loading into
+#   <BUNDLE-CODE>        the parent product. Its ProductClass must match the
+#                        relationship type's role, and its Type must be set
+#   <CHILD-A-CODE>       a product to put in the group
+#   <CHILD-B-CODE>       another one
+#
+# Note what is NOT here: no Product2. Bundles are built on products that already
+# exist. If one is missing, add it through the catalog, not through this spec.
+
+spec: rc-org-writer/v1
+
+target:
+  org: <target-org-alias>
+  modules: product_catalog_management
+
+author: <who is accountable for this run>
+created: '2026-11-27'
+
+purpose: >
+  One optional group on an existing bundle, holding two existing products.
+  Group created first so the components can inherit authorship from it: a
+  component carries no marker of its own, and a group does.
+
+marker:
+  token: RCW-20261127-BDL
+
+lookups:
+  - alias: bundle
+    object: Product2
+    where:
+      ProductCode: <BUNDLE-CODE>
+
+  - alias: child_a
+    object: Product2
+    where:
+      ProductCode: <CHILD-A-CODE>
+
+  - alias: child_b
+    object: Product2
+    where:
+      ProductCode: <CHILD-B-CODE>
+
+  # A stable key: GlobalKey is unique and idLookup on ProductRelationshipType.
+  # Its MainProductRoleCat must match the parent product's ProductClass.
+  - alias: bundle_component
+    object: ProductRelationshipType
+    where:
+      GlobalKey: BundleToBundleComponentRelationship
+
+records:
+
+  # The group is created first and carries the marker in its Code, which is
+  # unique and idLookup. Everything below inherits authorship from it.
+  - alias: options_group
+    object: ProductComponentGroup
+    key: Code
+    fields:
+      Name: RCW-20261127-BDL Options
+      Code: RCW-20261127-BDL-options
+      ParentProductId: '@bundle'
+      MinBundleComponents: 0
+      MaxBundleComponents: 2
+      Sequence: 90
+
+  # Components are tier 3 and can carry no marker. `marked_by` names the group,
+  # and the component's lookup to it is create-only, so it cannot be moved out.
+  #
+  # No QuantityScaleMethod here: these components are quantity-editable, and the
+  # platform clears the scale method whenever IsQuantityEditable is true. Sending
+  # one is accepted and silently discarded.
+  - alias: option_a
+    object: ProductRelatedComponent
+    marked_by: options_group
+    fields:
+      ParentProductId: '@bundle'
+      ChildProductId: '@child_a'
+      ProductComponentGroupId: '@options_group'
+      ProductRelationshipTypeId: '@bundle_component'
+      IsComponentRequired: false
+      IsDefaultComponent: false
+      IsQuantityEditable: true
+      DoesBundlePriceIncludeChild: false
+      Quantity: 1
+      Sequence: 1
+
+  - alias: option_b
+    object: ProductRelatedComponent
+    marked_by: options_group
+    fields:
+      ParentProductId: '@bundle'
+      ChildProductId: '@child_b'
+      ProductComponentGroupId: '@options_group'
+      ProductRelationshipTypeId: '@bundle_component'
+      IsComponentRequired: false
+      IsDefaultComponent: false
+      IsQuantityEditable: true
+      DoesBundlePriceIncludeChild: false
+      Quantity: 1
+      Sequence: 2
