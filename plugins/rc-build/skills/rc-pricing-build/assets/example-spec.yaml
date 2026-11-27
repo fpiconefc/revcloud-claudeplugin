@@ -1,0 +1,103 @@
+# A complete, small volume-discount spec: one schedule, three tiers, applied and
+# torn down as a unit. The shape is finished; three values are placeholders you
+# replace with the target org's own identifiers before running.
+#
+#   <target-org-alias>     the org you are loading into
+#   <PRODUCT-CODE>         the product the tiers price
+#   <SELLING-MODEL-NAME>   the selling model it is sold on
+#
+# The product must already be assigned to that selling model. check_pricing_spec.py
+# --target-org proves it before anything is written.
+
+spec: rc-org-writer/v1
+
+target:
+  org: <target-org-alias>
+  modules: salesforce_pricing
+
+author: <who is accountable for this run>
+created: '2026-11-26'
+
+purpose: >
+  Volume discount on one product sold on one selling model: 5% from 100 units,
+  10% from 251, 15% from 501. Created inactive; a person activates it after
+  verify. Range method, so the tier a quantity reaches applies to every unit.
+
+marker:
+  token: RCW-20261126-VOL
+
+lookups:
+  - alias: product
+    object: Product2
+    where:
+      ProductCode: <PRODUCT-CODE>
+
+  - alias: selling_model
+    object: ProductSellingModel
+    where:
+      Name: <SELLING-MODEL-NAME>
+
+  - alias: price_book
+    object: Pricebook2
+    where:
+      IsStandard: true
+
+records:
+
+  # Created inactive on purpose. Activation is a human step after verify; see the
+  # skill body for why a second active schedule over the same price book is not
+  # something this cycle decides.
+  - alias: volume_schedule
+    object: PriceAdjustmentSchedule
+    key: GlobalKey
+    fields:
+      Name: RCW-20261126-VOL volume discount
+      GlobalKey: RCW-20261126-VOL-schedule
+      ScheduleType: Volume
+      AdjustmentMethod: Range
+      IsActive: false
+      Pricebook2Id: '@price_book'
+      EffectiveFrom: '2027-01-01T00:00:00Z'
+      Description: Example spec from rc-pricing-build. Safe to tear down.
+
+  # Bounds are inclusive at both ends, so each tier starts one unit above the
+  # previous tier's upper bound: 251 and not 250. EffectiveFrom is required on
+  # every tier even though the describe reports it nillable.
+  - alias: tier_100
+    object: PriceAdjustmentTier
+    marked_by: volume_schedule
+    fields:
+      PriceAdjustmentScheduleId: '@volume_schedule'
+      Product2Id: '@product'
+      ProductSellingModelId: '@selling_model'
+      EffectiveFrom: '2027-01-01T00:00:00Z'
+      LowerBound: 100
+      UpperBound: 250
+      TierType: AdjustmentPercentage
+      TierValue: 5
+
+  - alias: tier_251
+    object: PriceAdjustmentTier
+    marked_by: volume_schedule
+    fields:
+      PriceAdjustmentScheduleId: '@volume_schedule'
+      Product2Id: '@product'
+      ProductSellingModelId: '@selling_model'
+      EffectiveFrom: '2027-01-01T00:00:00Z'
+      LowerBound: 251
+      UpperBound: 500
+      TierType: AdjustmentPercentage
+      TierValue: 10
+
+  # The last tier is the only one that may be open-ended.
+  - alias: tier_501
+    object: PriceAdjustmentTier
+    marked_by: volume_schedule
+    fields:
+      PriceAdjustmentScheduleId: '@volume_schedule'
+      Product2Id: '@product'
+      ProductSellingModelId: '@selling_model'
+      EffectiveFrom: '2027-01-01T00:00:00Z'
+      LowerBound: 501
+      TierType: AdjustmentPercentage
+      TierValue: 15
