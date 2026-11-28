@@ -104,17 +104,8 @@ which defeats half the reason for having a spec at all. And it buries the warnin
 that fires twenty times on a correct spec teaches people to ignore the validator.
 
 So a pre-existing record is declared under `lookups`, by a stable key rather than an Id, and
-referenced with the same `@alias` syntax as anything the spec creates:
-
-```yaml
-lookups:
-  - alias: platform_bundle
-    object: Product2
-    where:
-      ProductCode: PLAT-BUNDLE
-```
-
-The rules are short, and two of them are absolute.
+referenced with the same `@alias` syntax as anything the spec creates — the `lookups` block
+in the template above is one. The rules are short, and two of them are absolute.
 
 - **Preview resolves each lookup by query against the target org.** A lookup that matches
   nothing, or matches more than one record, **fails the preview and nothing is written.**
@@ -309,27 +300,60 @@ captured. `_orgio.py` holds what apply, verify and teardown share — the `sf` c
 | `verify.py` | verify | read-only |
 | `teardown.py` | teardown | deletes, and only with `--confirm` |
 
-## A validator that reads metadata cannot be complete
+## The describe is not the contract
 
-This is the most useful thing the first full run produced, and it changes what preview is
-for.
+`notes/` records twelve findings about what the platform does with a write. A describe states
+three of them. The other nine are the class this section names. The inventory stays in the
+pack — `notes/org-writing.md`, `notes/price-adjustments.md`, `notes/bundles.md`; what belongs
+here is the shape, because a new skill has to recognise one before it has an instance of its
+own.
 
-`PriceAdjustmentTier.EffectiveFrom` is `nillable: true` in a v68 describe — optional, as
-far as metadata goes. The platform rejects a tier without it: *"Specify the Effective From
-date to save your price adjustment tier."* There are RCA validation rules that **no describe
-expresses**, so a validator reading field metadata is incomplete **by design**, not by
-omission. No amount of work on `validate_spec.py` closes that gap.
+| Shape | What happens | Found by | Checkable once known |
+|---|---|---|---|
+| **1 required, undeclared** (2) | the describe says `nillable: true`, the platform refuses the record without the field | a refused create | from the spec alone |
+| **2 invalid combination** (4) | two lookups each resolve to a real record and are invalid together | a refused create | by querying the org, unless both records are in the spec |
+| **3 accepted and discarded** (1) | the create returns success, the value does not persist, and an update does not fix it | reading the record back | not before the write |
 
-The same run produced a second, harder case. A tier whose product is not assigned to the
-selling model it names is rejected, and that precondition lives on
-`ProductSellingModelOption` — an object the spec never mentions. **Two lookups that are
-each individually valid can be jointly invalid**, and nothing in the spec is wrong when they
-are.
+**Shape 1**, one instance: *"Specify the Effective From date to save your price adjustment
+tier."* — `PriceAdjustmentTier.EffectiveFrom`, `nillable: true` in a v68 describe. The other
+finding of this shape says why metadata will never close the gap: a component needs *either*
+a child product *or* a child product classification, both fields nillable. "One of these two"
+is not something a field says about itself.
 
-So **preview against the org is not a luxury** — it is the only phase that finds rules like
-these, by asking rather than reasoning about metadata — and **a clean preview still does not
-promise apply will succeed**. Apply surfaces the platform's message verbatim, because that
-sentence is the documentation for a rule that has none. Record it in `notes/`.
+**Shape 2**, one instance: a tier carries `Product2Id` and `ProductSellingModelId`, and the
+pair must already be joined by a `ProductSellingModelOption` — **an object the spec never
+mentions.** That is the sharpest of the four. In two others the deciding fields sit on the
+records the lookups name, each legal alone; in the last a single lookup's target must have a
+field set, and the message names the lookup, which is populated.
+
+**Shape 3**, the only instance so far: `QuantityScaleMethod` is discarded whenever
+`IsQuantityEditable` is true. Apply saw a success, the log holds a real Id, the spec is well
+formed, the describe calls the field writable — and reading the record back is what showed
+nothing had been stored.
+
+**A validator that reads field metadata cannot be complete, by design rather than by
+omission.** Not one of the nine is derivable from metadata; each entered this repository
+because a write was refused or silently lost. So **preview against the org is not an
+optimisation** — it is where shape 2 surfaces, and a clean preview still does not promise
+apply will succeed — and **verify reads back every field it wrote, not a sample**, because
+shape 3 is invisible from the spec, from apply's output and from the log. When the platform
+refuses something, put its sentence in `notes/` verbatim: for most of these rules that
+sentence is the only documentation there is.
+
+### What a new build skill does before it emits a spec
+
+- **Two lookups to different objects in one record?** Ask which third object relates them and
+  query it in the preview. That nothing does is an answer too, and worth writing down.
+- **A field the describe calls optional that the domain says cannot be?** Try it missing,
+  once, against an org, before trusting the metadata.
+- **An unexpected difference in verify that will not go away?** Suspect shape 3 before
+  suspecting the spec. An update that also fails to stick confirms it.
+
+Two findings fit none of the three shapes: a tier sharing a bound with another tier, a child
+product appearing twice in one group. Both are collisions between records the spec itself
+declares, which is the one position a check argues better than the platform from — it names
+the two records that collide, where the platform's message names only the condition.
+Everything behind this section was observed on one org and has not been replicated.
 
 ## Marking — how a record is known to be ours
 
@@ -398,29 +422,10 @@ Half the value of this skill, and each a rule the cycle enforces rather than adv
 ## Without a shell
 
 claude.ai has no shell, and the connector has `createSobjectRecord`, `updateSobjectRecord`
-and `deleteSobjectRecord`, so the whole cycle is executable from a chat session. That makes
-it **more** important that the guardrails live in this body: there is no script in that
-branch, and this text is the entire contract. Run the four phases by hand, in order:
-
-- **preview.** Reproduce the offline checks with `getObjectSchema` per object
-  (`references/marking-and-idempotency.md` has the per-object answers), then `soqlQuery` each
-  lookup to prove it resolves to exactly one, and each `key` to classify the record into the
-  three states above — absent, matching, or differing. Show all of it before asking.
-- **apply.** `createSobjectRecord` in dependency order, after an explicit yes to that
-  preview. **Write the log into the conversation as you go**, one line per record with the
-  returned Id, immediately after each create. Stop at the first failure, and write no line
-  for a create that returned no Id.
-- **verify.** `soqlQuery` each created Id back, comparing by value and reporting matches,
-  expected differences and unexpected differences separately.
-- **teardown.** `deleteSobjectRecord` in reverse order, from the logged ids, and nothing else.
-
-**The weak point of this branch is the log, and it is worth saying plainly.** The transcript
-is the log, and a conversation is not durable storage: if the session is lost or compacted,
-the ids go with it and teardown has no source — the records stay in the org with nothing but
-the marker to find them by, and on the 70 objects that carry no marker, not even that. For
-anything past a handful of records **use the terminal branch**, where the log is a file.
-Otherwise keep the spec small enough that the whole transcript fits on one screen, and copy
-the ids somewhere durable before moving on.
+and `deleteSobjectRecord`, so the whole cycle is executable from a chat session by hand.
+That makes the guardrails matter more, not less: there is no script in that branch, and the
+log is a transcript rather than a file. `references/without-a-shell.md` has the four phases
+written out for it, and the one weakness that branch has.
 
 `updateSobjectRecord` is available here and is **not** part of this cycle; see below.
 
@@ -461,26 +466,21 @@ Per-object detail, with the counts behind the tier table, in
   `Name` is `autoNumber: true, createable: false`, and a created record came back numbered.
 - **PLATFORM (v68, observed)** — teardown in reverse order succeeds, leaving the org as it
   was with referenced records untouched.
-- **PLATFORM (v68, observed)** — `PriceAdjustmentTier.EffectiveFrom` is `nillable: true`
-  and rejected when absent: *"Specify the Effective From date to save your price adjustment
-  tier."*
-- **PLATFORM (v68, observed)** — a tier whose bounds overlap another under the same
-  schedule is refused: *"The tiers must have unique effective date ranges and lower and upper
-  bound value ranges."*
+- **PLATFORM (v68, observed)** — `PriceAdjustmentTier.EffectiveFrom` is `nillable: true` and
+  rejected when absent; a tier whose bounds overlap another under the same schedule is
+  refused. The platform's sentences, and the rest of the inventory, are in `notes/`.
 
 ## Not verified
 
 - **The cycle has been run on one org only.** Everything marked *observed* above comes from
   those runs and has **not been replicated on a second org**, so it is unvalidated under the
   pack's notes protocol.
-- **Upsert-on-key is still unproven.** The run showed that a *duplicate insert* on `GlobalKey`
-  is refused by the platform's index, naming the colliding record. Re-running the same spec
-  on 2026-11-26 stopped with `DUPLICATE_VALUE` and created nothing — no duplicate, and no
-  no-op either; the guardrails say why upsert is not the answer.
+- **Upsert-on-key is still unproven.** A *duplicate insert* on `GlobalKey` is refused by the
+  platform's index, naming the colliding record; re-running the same spec stopped with
+  `DUPLICATE_VALUE` and created nothing — no duplicate, and no no-op either.
 - **Autonumbered names do not reset when records are deleted.** A failed or torn-down apply
-  leaves gaps in sequences like `PAT-00000000nn`, and teardown does not and cannot reclaim
-  them. Harmless, but it means the org is not byte-identical after a teardown even when it is
-  structurally identical — do not use name continuity as evidence that nothing ran.
+  leaves gaps in sequences like `PAT-00000000nn`. Harmless, but the org is not byte-identical
+  after a teardown — do not read name continuity as evidence that nothing ran.
 - **Whether deleting `AttributeBasedAdjRule` cascades to its conditions.** The conditions
   cannot be deleted directly and nothing says what happens to them, so a spec creating them
   is not known to be cleanly reversible.
