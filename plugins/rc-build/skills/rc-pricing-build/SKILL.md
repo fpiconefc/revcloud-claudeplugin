@@ -19,7 +19,8 @@ default becomes a price.
 
 What this skill owns is narrow: which objects and fields a pricing load touches, in what
 order, and **what to check before the preview** — because three of the rules that stop a
-pricing apply appear in no describe, and one of them concerns an object the spec never names.
+pricing apply are instances of the class `rc-org-writer` sets out in **The describe is not the contract**, and
+the pre-flight below is where this domain's copies of them live.
 
 ## Prerequisite
 
@@ -57,7 +58,8 @@ python3 plugins/rc-build/skills/rc-pricing-build/scripts/check_pricing_spec.py \
 
 Read-only. Run it **before** `validate_spec.py`, and both before apply. Seven checks in two
 groups, and the first three are platform rules that no describe expresses — each one observed
-stopping a real apply on API v68.
+stopping a real apply on API v68. Why a validator cannot derive them is `rc-org-writer`'s
+**The describe is not the contract**.
 
 ### 1. Tier bounds are inclusive at both ends
 
@@ -94,7 +96,7 @@ Set it on every tier. The schedule's own dates do not substitute.
 
 A tier carries `Product2Id` and `ProductSellingModelId`. Both can name real records and the
 tier still fails, because the pair must be joined by a `ProductSellingModelOption` — **an
-object the spec never mentions.** Two individually valid lookups, jointly invalid.
+object the spec never mentions.**
 
 `validate_spec.py --target-org` cannot see this: it checks that each lookup resolves, and
 each one does. So this skill queries the junction directly, for every distinct

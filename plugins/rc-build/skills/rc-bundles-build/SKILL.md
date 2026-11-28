@@ -16,8 +16,9 @@ group, or whether a group should nest — **read `rc-bundles` first**. Building 
 unfinished decision just records the indecision in an org.
 
 What this skill owns: which objects a bundle load touches, in what order, and **what to check
-before the preview**, because five of the rules that stop a bundle apply appear in no
-describe and two of them compare a field on one looked-up record against a field on another.
+before the preview**, because five of the rules that stop a bundle apply are instances of the
+class `rc-org-writer` sets out in **The describe is not the contract**, and the pre-flight below is where this
+domain's copies of them live.
 
 ## Prerequisite
 
@@ -80,11 +81,14 @@ these the sentence is the only documentation there is.
 | a component's group must belong to the same parent product | *"Select a group related to the same bundle as this component."* |
 | a child may appear only once per group | *"The child product exists in the group."* |
 
-Two of these are the pattern `rc-pricing-build` meets as the product-to-selling-model
-assignment: **two lookups that each resolve to a real record and are invalid together.** A
-`Bundle`-class parent with a `Set`-role relationship type is refused, and so is a
-`Simple`-class parent with a `Bundle`-role one. Neither lookup is wrong on its own. Checking
-this needs the org, which is why `--target-org` is not optional before an apply.
+Three of these are shape 2 in `rc-org-writer`'s **The describe is not the contract** — two
+lookups that each resolve and are invalid together. A `Bundle`-class parent with a `Set`-role
+relationship type is refused, and so is a `Simple`-class parent with a `Bundle`-role one;
+each lookup is valid alone. A component's group must hang off the same parent product as the
+component, which is the same shape between two aliases. And the `Type` rule is the degenerate
+case, one lookup whose target must carry a field. The group rule is checked offline because
+both records are in the spec; the other two need `--target-org`, which is why it is not
+optional before an apply.
 
 The `Type` rule has a trap in its wording: the message names `ParentProductId`, which **is**
 populated. What is null is `Type` on the product it points at — a field on an object the spec
@@ -96,13 +100,13 @@ never mentions. Read the error as being about the target, not the lookup.
 returns success, the field comes back null, and a later update does not stick either. On a
 component with `IsQuantityEditable: false` the same value persists.
 
-This is worse than a refusal: nothing fails, and a verify pass comparing the spec to the org
-reports the difference on every run forever. The check rejects the combination, and the
-reason it is coherent to do so is that a quantity the buyer edits has no parent scaling.
+This is shape 3 in `rc-org-writer`'s **The describe is not the contract**, and the only instance of it
+recorded so far. The check rejects the combination, and the reason it is coherent to do so is
+that a quantity the buyer edits has no parent scaling.
 
-It also explains something `rc-bundles` had recorded as unexplained. Across every component
-in the org available for checking, `IsQuantityEditable: true` goes with a null scale method
-in **87 cases out of 87**, with no exceptions. Those nulls were never a loading accident.
+It also explains something `rc-bundles` had recorded as unexplained. Across the components
+of the one org available for checking, `IsQuantityEditable: true` goes with a null scale
+method in **85 cases out of 85**, counting only rows this work did not create. Those nulls were never a loading accident.
 
 ### Structure, from `rc-bundles` and checkable without an org
 
