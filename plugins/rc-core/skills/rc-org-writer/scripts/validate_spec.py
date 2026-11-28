@@ -77,11 +77,19 @@ def _scalar(raw: str, line: int):
     return s
 
 
-def parse(text: str) -> dict:
+def parse(text: str, list_sections=LIST_SECTIONS, section_keys=None) -> dict:
     """Parse the constrained subset: top-level mappings, one nested mapping level,
-    a list of mappings under `records`, and a list of scalars elsewhere."""
+    a list of mappings under `records`, and a list of scalars elsewhere.
+
+    `list_sections` and `section_keys` exist so a skill with its own spec shape
+    reuses this parser instead of growing a second one. `section_keys` maps a
+    section name to the keys its items may carry; a section absent from it is
+    parsed without that check. Both default to this spec's own shape.
+    """
+    if section_keys is None:
+        section_keys = {"records": RECORD_KEYS, "lookups": LOOKUP_KEYS}
     doc: dict = {}
-    lists: dict[str, list[dict]] = {name: [] for name in LIST_SECTIONS}
+    lists: dict[str, list[dict]] = {name: [] for name in list_sections}
     current: dict | None = None      # record being built
     section: str | None = None       # top-level key currently open
     nested: dict | None = None       # a one-level nested mapping (target, marker, fields)
@@ -108,7 +116,7 @@ def parse(text: str) -> dict:
         # a list item
         if body.startswith("- "):
             item = body[2:].strip()
-            if section in LIST_SECTIONS:
+            if section in list_sections:
                 if ":" not in item:
                     raise SpecError(
                         f"line {n}: a {section[:-1]} must start with `alias: <name>`"
@@ -153,8 +161,8 @@ def parse(text: str) -> dict:
                 nested = {}
                 current[key] = nested
             else:
-                allowed = LOOKUP_KEYS if section == "lookups" else RECORD_KEYS
-                if key not in allowed:
+                allowed = section_keys.get(section)
+                if allowed is not None and key not in allowed:
                     raise SpecError(
                         f"line {n}: {key!r} is not a {section[:-1]} key; allowed: "
                         + ", ".join(sorted(allowed))
@@ -176,7 +184,7 @@ def parse(text: str) -> dict:
         nested = None
         if not value:
             section = key
-            doc[key] = lists[key] if key in LIST_SECTIONS else {}
+            doc[key] = lists[key] if key in list_sections else {}
         elif value == ">":
             section = key
             doc[key] = ""
@@ -185,7 +193,7 @@ def parse(text: str) -> dict:
             section = key
             doc[key] = _scalar(value, n)
 
-    for name in LIST_SECTIONS:
+    for name in list_sections:
         doc[name] = lists[name]
     return doc
 
