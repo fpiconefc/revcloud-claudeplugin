@@ -164,12 +164,15 @@ cart". `Constant` and `Proportional`, defaulting to `Proportional`.
 `Proportional` means ten of the parent brings ten times the component. `Constant` means the
 component quantity holds regardless of the parent.
 
-**The field is nillable, and null is a third state nothing explains.** PLATFORM (v68
-describe) has it nillable with a default of `Proportional`, and in the one org available for
-checking null is the second most common setting of the three, not a stray. So the default
-does not always apply on whatever path records are loaded through. What the engine does with
-null — fall back to `Proportional`, or treat it as unset — is answered by neither the
-guide nor a describe. Set it explicitly and the question does not arise.
+**Null is not a third choice; it is what the platform stores when the quantity is editable.**
+PLATFORM (v68, observed 2026-11-27): sent together with `IsQuantityEditable: true`, the value
+is discarded — the create returns success, the field comes back null, and a later update does
+not stick either. With `IsQuantityEditable: false` the same value persists.
+
+So **leave the field unset on an editable component**, and do not read a null back as
+somebody having chosen `Constant`: read it as the component being quantity-editable. A
+quantity the buyer sets has no parent scaling, and the platform enforces that by clearing the
+field rather than by refusing the record. `rc-bundles-build` carries the check.
 
 ### `DoesBundlePriceIncludeChild`
 
@@ -183,13 +186,14 @@ to decide, which is the right outcome for the most consequential of the five.
 
 ### Combinations that disagree with themselves
 
-Advice, not platform behaviour. Each of these saves without complaint.
+Advice rather than platform behaviour, with the one exception the table marks. Each of these
+saves without complaint.
 
 | Combination | Why it reads wrong |
 |---|---|
 | required on, default off | required but not selected to begin with: the runtime has to resolve a contradiction you wrote down |
 | quantity bounds set, editable off | the bounds describe something nobody can change |
-| `Proportional` and editable on | parent scaling and the buyer both claim the same number |
+| `Proportional` and editable on | the one row here that is platform behaviour: the scale method is discarded, see above |
 | price included on, and a bundle adjustment on the same component | the component's price is counted inside the parent and discounted again |
 | group min above 0, every component default off | the group demands a choice and offers no starting point |
 
@@ -345,7 +349,7 @@ customer intent implies.
 | part of the product, not a choice | true | true | false | `Proportional` | true |
 | included, and they may drop it | false | true | false | `Proportional` | true |
 | included, priced separately on the quote | false | true | false | `Proportional` | false |
-| optional add-on, they set how many | false | false | true | `Constant` | false |
+| optional add-on, they set how many | false | false | true | *leave unset* | false |
 | optional, and it scales with the parent | false | false | false | `Proportional` | false |
 | one seat per seat of the parent, fixed | true | true | false | `Proportional` | true |
 
@@ -397,9 +401,9 @@ child is and not how to say what the parent is.
 false on the override. The three other booleans on the component default to false in both.
 
 **5. `QuantityScaleMethod` is nillable in the org** and "Defaulted on create" with default
-`Proportional` on the override, yet 93 of 272 rows carry null. Either the default does not
-apply on the path those rows were loaded through, or it was added after they were written.
-Unresolved.
+`Proportional` on the override, yet 93 of 272 rows carry null. Resolved 2026-11-27 for 85 of
+them: the platform discards the field when `IsQuantityEditable` is true, so the documented
+default never reaches those rows. The other 8 are editable-false and still unexplained.
 
 Precedence applied throughout: ORG wins for what this org has, DOCS wins for what the product
 supports in general.
@@ -457,8 +461,9 @@ Field-by-field detail is in `references/component-field-map.md`. The load-bearin
   single bundle and goes two levels deep. Whether a third level behaves is untested, and "a
   group holds components or child groups, never both" is a pattern read off that one bundle,
   not a rule the platform states.
-- **Null `QuantityScaleMethod` is unexplained.** Common enough in the one org available to
-  rule out a stray, and nothing says what the engine does with it. Delta 5.
+- **Whether a null `QuantityScaleMethod` prices differently from `Proportional`.** Why the
+  nulls are there is settled — the platform clears the field on an editable component — but
+  what the engine then does at runtime is still untested. Delta 5.
 - **Both override objects are empty** wherever it was possible to check. Context-dependent
   cardinality is documented and unobserved, so the shared-sub-bundle argument above is read
   off the object graph and the guide's field descriptions.
