@@ -36,10 +36,10 @@ This skill creates **configuration** by DML: schedules, tiers, groups, component
 relationship types, selling models. That is its whole job.
 
 **It does not run transactions.** Place Sales Transaction, placing a quote, reading which
-adjustment landed on `QuoteLinePriceAdjustment` — none of that is here. Those belong to a
-testing skill that does not exist yet. The distinction is not pedantry: configuration DML is
-reversible by deleting records, while a transaction creates assets and billing schedules
-whose removal is a different problem this contract does not cover.
+adjustment landed on `QuoteLinePriceAdjustment` — none of that is here. Those are
+`rc-pricing-test`, which follows this contract and stops at the quote. Not pedantry:
+configuration DML is reversible by deleting records, while a transaction creates assets and
+billing schedules whose removal is a different problem this contract does not cover.
 
 The working target is a **demo org** with catalogs, selling models, components and billing
 schedules loaded and in use. The risk there is not breaking production; it is **dirtying or

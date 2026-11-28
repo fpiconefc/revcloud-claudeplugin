@@ -172,9 +172,11 @@ This skill creates structure. It does **not** run transactions, and nothing here
 how the bundle behaves in a cart — whether a group's cardinality is enforced the way you
 expect, what a required component does to a configuration, or what the bundle costs.
 
-That belongs to a testing skill that does not exist yet, which will depend on this one for
-the structure it exercises. A verified spec means the records are what you asked for, not
-that the configurator behaves as you expect.
+That belongs to **`rc-pricing-test`**, which depends on this one for the structure it
+exercises. A verified spec means the records are what you asked for, not that the
+configurator behaves as you expect. Note the limit at the other end too: that skill has so
+far priced single lines, not a bundle parent with its components, so for bundles it is the
+cycle that exists rather than the coverage.
 
 ## Verified anchors
 

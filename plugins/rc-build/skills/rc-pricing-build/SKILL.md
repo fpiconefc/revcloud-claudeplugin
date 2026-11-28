@@ -215,11 +215,13 @@ performs.
 This skill creates configuration. It does **not** run transactions, and nothing here tells
 you what a quote actually prices.
 
-Placing a quote and reading which adjustment landed on `QuoteLinePriceAdjustment` or
-`OrderItemAdjustmentLineItem` belongs to a testing skill that does not exist yet, and which
-will depend on this one for the configuration it exercises. Until it does, a verified spec
+Placing a quote and reading which adjustment landed on `QuoteLinePriceAdjustment` is
+**`rc-pricing-test`**, which depends on this one for the configuration it exercises and
+stops at the quote; `OrderItemAdjustmentLineItem` is past where it stops. A verified spec
 means the records are what you asked for — not that the engine prices the way you expect.
-Those are different claims and the gap between them is where a pricing bug lives.
+Those are different claims and the gap between them is where a pricing bug lives, and
+`rc-pricing-test` found one there: a schedule and tier that read correctly, on a product
+that priced at list anyway.
 
 ## Verified anchors
 

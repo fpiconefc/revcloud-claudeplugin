@@ -1,0 +1,74 @@
+# One line, one expectation, one teardown. The shape is finished and verified
+# end to end on API v68; every <ANGLE-BRACKET> value below is from an org you do
+# not have and MUST be replaced before this runs. Nothing here resolves anywhere
+# but the org it was written against.
+#
+#   <target-org-alias>     the org you are testing in
+#   <PRICE-BOOK-NAME>      the book the quote prices from. The price adjustment
+#                          schedule has to be scoped to this same book or its
+#                          tiers never enter the calculation.
+#   <PRODUCT-CODE>         a product that already exists
+#   <SELLING-MODEL-NAME>   one the product is assigned to. Preview checks the
+#                          assignment through ProductSellingModelOption and
+#                          stops if it is missing; it never creates one.
+#   <EXPECTED-NET-UNIT>    what you believe one unit should cost at this
+#                          quantity, decided BEFORE you look at the org
+#
+# Do not fill the expectation in from the preview's output. The whole value of
+# this file is that the number in it came from somewhere else.
+
+spec: rc-pricing-test/v1
+
+target:
+  org: <target-org-alias>
+
+author: <who is accountable for this run>
+created: '2026-11-27'
+
+purpose: >
+  Prove that the volume tier covering this quantity actually moves the price on
+  a quote line, and leave the org exactly as it was found.
+
+marker:
+  token: RCT-20261127-A
+
+# mode: lookup   an account that already exists. Never marked, never modified,
+#                never torn down.
+# mode: create   this run creates it, and teardown deletes it. The name must
+#                contain the marker token so a leftover is identifiable.
+account:
+  mode: create
+  name: RCT-20261127-A Test Account
+
+lookups:
+  - alias: book
+    object: Pricebook2
+    where:
+      Name: <PRICE-BOOK-NAME>
+
+  - alias: product
+    object: Product2
+    where:
+      ProductCode: <PRODUCT-CODE>
+
+  - alias: model
+    object: ProductSellingModel
+    where:
+      Name: <SELLING-MODEL-NAME>
+
+lines:
+  # The four date and frequency fields are not optional in practice, whatever a
+  # describe says about nillability. PLATFORM (v68, observed): pricing refuses a
+  # line with no end date and no subscription term; a dated line with no period
+  # boundary; and a line on a term-defined or evergreen selling model with no
+  # billing frequency. Each refusal is in the skill body with its sentence.
+  - alias: line_a
+    product: '@product'
+    selling_model: '@model'
+    quantity: 7
+    start_date: '2027-01-01'
+    end_date: '2027-12-31'
+    period_boundary: Anniversary
+    billing_frequency: Annual
+    expect:
+      net_unit_price: <EXPECTED-NET-UNIT>
